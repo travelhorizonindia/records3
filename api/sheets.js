@@ -10,8 +10,8 @@
  *  - For all other sheets, the primary key is `id`
  */
 
-import { readSheet, appendRow, updateRow, objectToRow, rowToObject, ensureSheet } from '../_sheetsHelper.js'
-import { SHEET_CONFIG, setCors } from '../_config.js'
+import { readSheet, appendRow, updateRow, objectToRow, rowToObject, ensureSheet } from './_sheetsHelper.js'
+import { SHEET_CONFIG, setCors } from './_config.js'
 
 export default async function handler(req, res) {
   setCors(res)
