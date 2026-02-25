@@ -28,8 +28,10 @@ export default async function handler(req, res) {
   const { headers } = config
   const pkField = sheet === 'EnquiriesBookings' ? 'enquiryId' : 'id'
 
-  if (!spreadsheetId) {
-    return res.status(500).json({ message: `Spreadsheet ID not configured for ${sheet}` })
+  if (!spreadsheetId || spreadsheetId.includes('<')) {
+    return res.status(500).json({
+      message: `Spreadsheet ID for "${sheet}" is not configured. Please set the environment variable in Vercel.`,
+    })
   }
 
   try {
@@ -45,7 +47,8 @@ export default async function handler(req, res) {
         .map((row) => rowToObject(effectiveHeaders, row))
         .filter((obj) => all === 'true' || obj.isDeleted !== 'true')
 
-      return res.status(200).json({ data: objects, headers: effectiveHeaders })
+      // Always return an array, never null
+      return res.status(200).json({ data: objects || [], headers: effectiveHeaders })
     }
 
     // ── POST (create) ─────────────────────────────────────────────────────────
@@ -94,6 +97,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method not allowed' })
   } catch (err) {
     console.error(`[sheets API] Error on sheet=${sheet} method=${req.method}:`, err)
+    // Return empty data instead of crashing the frontend
+    if (req.method === 'GET') {
+      return res.status(200).json({ data: [], headers, error: err.message })
+    }
     return res.status(500).json({ message: err.message || 'Internal server error' })
   }
 }

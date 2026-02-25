@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 
 export function useAsync(asyncFn, deps = []) {
-  const [state, setState] = useState({ data: null, loading: true, error: null })
+  const [state, setState] = useState({ data: [], loading: true, error: null })
 
   const execute = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
       const data = await asyncFn()
-      setState({ data, loading: false, error: null })
+      // Always fall back to [] if the response is null/undefined
+      setState({ data: data ?? [], loading: false, error: null })
     } catch (err) {
-      setState({ data: null, loading: false, error: err.message || 'An error occurred' })
+      setState({ data: [], loading: false, error: err.message || 'An error occurred' })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
   useEffect(() => {
