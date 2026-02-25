@@ -21,7 +21,7 @@ async function getAccessToken() {
   }
 
   // Normalise escaped newlines that Vercel sometimes stores as literal \n
-  const privateKeyPem = rawKey.replace(/\\n/g, '\n')
+  const privateKeyPem = cleanPrivateKey(rawKey)
 
   const now = Math.floor(Date.now() / 1000)
   const header = { alg: 'RS256', typ: 'JWT' }
@@ -34,7 +34,10 @@ async function getAccessToken() {
   }
 
   const encode = (obj) =>
-    btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+    btoa(JSON.stringify(obj))
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
 
   const headerB64 = encode(header)
   const payloadB64 = encode(payload)
@@ -79,10 +82,61 @@ async function getAccessToken() {
   return tokenData.access_token
 }
 
+/**
+ * Robustly cleans the private key from environment variable.
+ * Handles all common formats:
+ *  - Wrapped in quotes: "-----BEGIN..." or '-----BEGIN...'
+ *  - Literal \n characters (escaped newlines stored as two chars)
+ *  - Actual newlines (multiline value pasted directly)
+ *  - Mixed formats
+ */
+function cleanPrivateKey(raw) {
+  let key = raw
+
+  // Remove surrounding quotes if present (single or double)
+  if ((key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1)
+  }
+
+  // Replace literal \n (two characters: backslash + n) with actual newlines
+  key = key.replace(/\\n/g, '\n')
+
+  // Normalize any \r\n or \r to \n
+  key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+  // Ensure the key has proper structure with newlines around the base64 content
+  // This handles cases where the header/footer got merged with the content
+  key = key
+    .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+    .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----')
+
+  // Collapse any double newlines that the above may have introduced
+  key = key.replace(/\n+/g, '\n').trim()
+
+  return key
+}
+
 function pemToBinary(pem) {
-  const lines = pem.split('\n').filter((l) => !l.startsWith('-----'))
-  const b64 = lines.join('')
-  const binary = atob(b64)
+  // Extract only the base64 content between the header and footer lines
+  const lines = pem.split('\n')
+  const base64Lines = lines.filter(
+    (line) =>
+      line.trim() !== '' &&
+      !line.includes('-----BEGIN') &&
+      !line.includes('-----END')
+  )
+  const base64 = base64Lines.join('')
+
+  // Validate — base64 should only contain these characters
+  if (!/^[A-Za-z0-9+/=]+$/.test(base64)) {
+    throw new Error(
+      `Private key contains invalid characters. Please check GOOGLE_PRIVATE_KEY format in your environment variables. ` +
+      `Found unexpected characters in base64 content.`
+    )
+  }
+
+  const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
   return bytes.buffer
