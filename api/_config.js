@@ -41,7 +41,7 @@ export const SHEET_CONFIG = {
   Agents: {
     spreadsheetId: SPREADSHEET_IDS.master,
     headers: [
-      'id', 'name', 'contactPersonName', 'phone', 'alternatePhone1', 'alternatePhone2',
+      'id', 'name', 'agentType', 'contactPersonName', 'phone', 'alternatePhone1', 'alternatePhone2',
       'email', 'alternateEmail', 'address',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
@@ -51,6 +51,7 @@ export const SHEET_CONFIG = {
     headers: [
       'id', 'name', 'phone', 'alternatePhone1', 'alternatePhone2',
       'email', 'alternateEmail', 'address',
+      'customerStatus',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
@@ -59,10 +60,20 @@ export const SHEET_CONFIG = {
   EnquiriesBookings: {
     spreadsheetId: SPREADSHEET_IDS.operations,
     headers: [
-      'enquiryId', 'bookingId', 'customerPhone', 'customerName',
-      'agentId', 'customerId', 'status',
+      'enquiryId', 'bookingId',
+      // Customer / contact info
+      'customerPhone', 'customerName', 'customerId',
+      'agentId', 'isAgentBooking',
+      // Guest (the person actually travelling, may differ from customer)
+      'guestName', 'guestPhone',
+      // Alternate contact (second person travelling or emergency contact)
+      'alternateContactName', 'alternateContactPhone',
+      // Status & lifecycle
+      'status', 'customerStatus',
+      // Trip meta
       'pickupDateTime', 'pickupLocation', 'trainFlightNumber', 'dropLocation',
       'customerRequests', 'notes', 'enquiryQuote', 'bookingQuote',
+      // Financials
       'totalAmount', 'amountReceived', 'amountPending',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],

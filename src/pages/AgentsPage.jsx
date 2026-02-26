@@ -3,13 +3,31 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useAsync, useAsyncCallback } from '../hooks/useAsync.js'
 import { getAgents, createAgent, updateAgent, softDeleteAgent } from '../services/agentService.js'
 import {
-  Button, Input, Modal, Table, Card, CardHeader,
-  PageHeader, SearchInput, ConfirmDialog, Alert, SectionTitle, InfoRow
+  Button, Input, Select, Modal, Table, Card, CardHeader,
+  PageHeader, SearchInput, ConfirmDialog, Alert, SectionTitle, InfoRow, Badge
 } from '../components/ui/index.jsx'
 
+const AGENT_TYPE_OPTIONS = [
+  { value: 'self', label: 'Self (Direct / Walk-in)' },
+  { value: 'google_ads', label: 'Google Ads' },
+  { value: 'other_business', label: 'Other Business / Individual Agent' },
+]
+
+const AGENT_TYPE_LABELS = {
+  self: 'Self',
+  google_ads: 'Google Ads',
+  other_business: 'Business Agent',
+}
+
+const AGENT_TYPE_COLORS = {
+  self: 'bg-blue-100 text-blue-700',
+  google_ads: 'bg-purple-100 text-purple-700',
+  other_business: 'bg-orange-100 text-orange-700',
+}
+
 const emptyForm = () => ({
-  name: '', contactPersonName: '', phone: '', alternatePhone1: '', alternatePhone2: '',
-  email: '', alternateEmail: '', address: '',
+  name: '', agentType: 'other_business', contactPersonName: '', phone: '',
+  alternatePhone1: '', alternatePhone2: '', email: '', alternateEmail: '', address: '',
 })
 
 export default function AgentsPage() {
@@ -55,6 +73,7 @@ export default function AgentsPage() {
   const validate = () => {
     const e = {}
     if (!form.name.trim()) e.name = 'Required'
+    if (!form.agentType) e.agentType = 'Required'
     return e
   }
 
@@ -73,6 +92,14 @@ export default function AgentsPage() {
 
   const columns = [
     { key: 'name', label: 'Agent Name' },
+    {
+      key: 'agentType', label: 'Type',
+      render: (a) => a.agentType ? (
+        <Badge className={AGENT_TYPE_COLORS[a.agentType] || 'bg-gray-100 text-gray-700'}>
+          {AGENT_TYPE_LABELS[a.agentType] || a.agentType}
+        </Badge>
+      ) : '—',
+    },
     { key: 'contactPersonName', label: 'Contact Person' },
     { key: 'phone', label: 'Phone' },
     { key: 'email', label: 'Email' },
@@ -109,6 +136,15 @@ export default function AgentsPage() {
           {formError && <Alert type="error" message={formError} />}
           <div className="grid grid-cols-2 gap-4">
             <Input label="Agent Name" required {...field('name')} />
+            <Select
+              label="Agent Type"
+              required
+              options={AGENT_TYPE_OPTIONS}
+              value={form.agentType}
+              onChange={(e) => setForm(f => ({ ...f, agentType: e.target.value }))}
+              error={errors.agentType}
+              placeholder="Select type..."
+            />
             <Input label="Contact Person" {...field('contactPersonName')} />
             <Input label="Phone" type="tel" {...field('phone')} />
             <Input label="Alternate Phone 1" type="tel" {...field('alternatePhone1')} />
@@ -127,6 +163,11 @@ export default function AgentsPage() {
       <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.name || 'Agent'} size="sm">
         {detail && (
           <div>
+            <div className="mb-3">
+              <Badge className={AGENT_TYPE_COLORS[detail.agentType] || 'bg-gray-100 text-gray-700'}>
+                {AGENT_TYPE_LABELS[detail.agentType] || detail.agentType || 'Unknown type'}
+              </Badge>
+            </div>
             <InfoRow label="Contact Person" value={detail.contactPersonName} />
             <InfoRow label="Phone" value={detail.phone} />
             <InfoRow label="Email" value={detail.email} />
