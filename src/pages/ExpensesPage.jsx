@@ -529,7 +529,7 @@ export function validateExpenseForm(tab, form) {
 }
 
 // ─── Clean form before save (strip internal keys) ────────────────────────────
-function cleanForm(tab, form) {
+export function cleanForm(tab, form) {
   const { _parkingEntries, ...rest } = form
   if (tab === 'parking' && _parkingEntries?.length > 0) {
     rest.parkingEntries = JSON.stringify(_parkingEntries)
