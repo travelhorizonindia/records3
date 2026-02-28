@@ -41,7 +41,7 @@ export const SHEET_CONFIG = {
   Agents: {
     spreadsheetId: SPREADSHEET_IDS.master,
     headers: [
-      'id', 'name', 'agentType', 'contactPersonName', 'phone', 'alternatePhone1', 'alternatePhone2',
+      'id', 'agentType', 'name', 'contactPersonName', 'phone', 'alternatePhone1', 'alternatePhone2',
       'email', 'alternateEmail', 'address',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
@@ -60,21 +60,13 @@ export const SHEET_CONFIG = {
   EnquiriesBookings: {
     spreadsheetId: SPREADSHEET_IDS.operations,
     headers: [
-      'enquiryId', 'bookingId',
-      // Customer / contact info
-      'customerPhone', 'customerName', 'customerId',
-      'agentId', 'isAgentBooking',
-      // Guest (the person actually travelling, may differ from customer)
-      'guestName', 'guestPhone',
-      // Alternate contact (second person travelling or emergency contact)
-      'alternateContactName', 'alternateContactPhone',
-      // Status & lifecycle
-      'status', 'customerStatus',
-      // Trip meta
+      'enquiryId', 'bookingId', 'customerPhone', 'customerName',
+      'agentId', 'customerId', 'isAgentBooking', 'status',
+      'guestName', 'guestPhone', 'alternateContactName', 'alternateContactPhone',
       'pickupDateTime', 'pickupLocation', 'trainFlightNumber', 'dropLocation',
       'customerRequests', 'notes', 'enquiryQuote', 'bookingQuote',
-      // Financials
       'totalAmount', 'amountReceived', 'amountPending',
+      'customerStatus',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
@@ -102,10 +94,11 @@ export const SHEET_CONFIG = {
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
-  DriverAllowances: {
+  FuelExpenses: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [
-      'id', 'tripId', 'bookingId', 'amountPerDay', 'numberOfDays', 'totalAmount',
+      'id', 'vehicleId', 'driverId', 'bookingId', 'tripId',
+      'date', 'amount', 'odometer',
       'isVerified', 'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
@@ -113,30 +106,38 @@ export const SHEET_CONFIG = {
   TollExpenses: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [
-      'id', 'tripId', 'bookingId', 'totalAmount', 'isVerified', 'notes',
+      'id', 'vehicleId', 'driverId', 'tripId', 'bookingId',
+      'totalAmount', 'isVerified', 'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
   ParkingExpenses: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [
-      'id', 'tripId', 'bookingId', 'totalAmount', 'isVerified', 'notes',
+      'id', 'vehicleId', 'driverId', 'tripId', 'bookingId',
+      'totalAmount', 'parkingEntries',
+      'isVerified', 'notes',
+      'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
+    ],
+  },
+  DriverAllowances: {
+    spreadsheetId: SPREADSHEET_IDS.financials,
+    headers: [
+      'id', 'vehicleId', 'driverId', 'tripId', 'bookingId',
+      'amountPerDay', 'numberOfDays', 'totalAmount',
+      'isNightCharge',
+      'isPaid', 'paidDate',
+      'isVerified', 'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
   StateTaxExpenses: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [
-      'id', 'tripId', 'bookingId', 'stateName', 'date', 'amount',
-      'isAitpEvaluation', 'isVerified', 'notes',
-      'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
-    ],
-  },
-  FuelExpenses: {
-    spreadsheetId: SPREADSHEET_IDS.financials,
-    headers: [
-      'id', 'vehicleId', 'driverId', 'bookingId', 'tripId',
-      'date', 'amount', 'isVerified', 'notes',
+      'id', 'vehicleId', 'tripId', 'bookingId',
+      'stateName', 'date', 'amount',
+      'isAitpEvaluation',
+      'isVerified', 'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
@@ -150,14 +151,29 @@ export const SHEET_CONFIG = {
   DriverSalary: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [
-      'id', 'driverId', 'date', 'amount', 'mode', 'notes',
+      // salaryMonth = "YYYY-MM" e.g. "2026-01" — for P&L month attribution
+      // date = actual payment date (can differ from salary month)
+      'id', 'driverId', 'salaryMonth', 'date', 'amount', 'mode',
+      'isPaid', 'paidDate',
+      'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
   BusinessExpenses: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [
-      'id', 'date', 'category', 'amount', 'description',
+      // expenseMonth = "YYYY-MM" for P&L attribution; date = actual payment date
+      'id', 'expenseMonth', 'date', 'category', 'amount', 'description',
+      'isPaid', 'paidDate',
+      'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
+    ],
+  },
+  OtherExpenses: {
+    spreadsheetId: SPREADSHEET_IDS.financials,
+    headers: [
+      'id', 'bookingId',
+      'date', 'category', 'amount', 'notes',
+      'isPaid', 'paidDate',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },

@@ -2,13 +2,18 @@ import api from './apiClient.js'
 import { generateId, getCreateMeta, getUpdateMeta } from '../utils/index.js'
 
 // ─── Generic expense factory ──────────────────────────────────────────────────
-const makeExpenseService = (sheet) => ({
+const makeExpenseService = (sheet, options = {}) => ({
   getAll: async () => {
     const { data } = await api.getAll(sheet)
     return data
   },
   create: async (data, username) => {
-    const record = { id: generateId(), isVerified: 'false', ...data, ...getCreateMeta(username) }
+    const record = {
+      id: generateId(),
+      ...(options.hasVerified !== false ? { isVerified: 'false' } : {}),
+      ...data,
+      ...getCreateMeta(username),
+    }
     return api.create(sheet, record)
   },
   update: async (id, updates, username) => {
@@ -17,50 +22,28 @@ const makeExpenseService = (sheet) => ({
   verify: async (id, username) => {
     return api.update(sheet, { id, isVerified: 'true', ...getUpdateMeta(username) })
   },
+  markPaid: async (id, paidDate, username) => {
+    return api.update(sheet, { id, isPaid: 'true', paidDate, ...getUpdateMeta(username) })
+  },
   softDelete: async (id, username) => {
     return api.update(sheet, { id, isDeleted: 'true', ...getUpdateMeta(username) })
   },
 })
 
-export const driverAllowanceService = makeExpenseService('DriverAllowances')
+export const fuelExpenseService = makeExpenseService('FuelExpenses')
 export const tollExpenseService = makeExpenseService('TollExpenses')
 export const parkingExpenseService = makeExpenseService('ParkingExpenses')
 export const stateTaxExpenseService = makeExpenseService('StateTaxExpenses')
-export const fuelExpenseService = makeExpenseService('FuelExpenses')
+export const driverAllowanceService = makeExpenseService('DriverAllowances')
 export const vehicleMaintenanceService = makeExpenseService('VehicleMaintenance')
+export const otherExpenseService = makeExpenseService('OtherExpenses', { hasVerified: false })
 
-// Driver salary (no isVerified)
+// Driver salary — no isVerified, has isPaid / salaryMonth
 export const driverSalaryService = {
-  getAll: async () => {
-    const { data } = await api.getAll('DriverSalary')
-    return data
-  },
-  create: async (data, username) => {
-    const record = { id: generateId(), ...data, ...getCreateMeta(username) }
-    return api.create('DriverSalary', record)
-  },
-  update: async (id, updates, username) => {
-    return api.update('DriverSalary', { id, ...updates, ...getUpdateMeta(username) })
-  },
-  softDelete: async (id, username) => {
-    return api.update('DriverSalary', { id, isDeleted: 'true', ...getUpdateMeta(username) })
-  },
+  ...makeExpenseService('DriverSalary', { hasVerified: false }),
 }
 
-// Business expenses (no isVerified)
+// Business expenses — no isVerified, has isPaid / expenseMonth
 export const businessExpenseService = {
-  getAll: async () => {
-    const { data } = await api.getAll('BusinessExpenses')
-    return data
-  },
-  create: async (data, username) => {
-    const record = { id: generateId(), ...data, ...getCreateMeta(username) }
-    return api.create('BusinessExpenses', record)
-  },
-  update: async (id, updates, username) => {
-    return api.update('BusinessExpenses', { id, ...updates, ...getUpdateMeta(username) })
-  },
-  softDelete: async (id, username) => {
-    return api.update('BusinessExpenses', { id, isDeleted: 'true', ...getUpdateMeta(username) })
-  },
+  ...makeExpenseService('BusinessExpenses', { hasVerified: false }),
 }

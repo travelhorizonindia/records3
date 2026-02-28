@@ -10,8 +10,9 @@ import { getDrivers } from '../services/driverService.js'
 import { getPayments, createPayment, verifyPayment } from '../services/paymentService.js'
 import {
   driverAllowanceService, tollExpenseService, parkingExpenseService,
-  stateTaxExpenseService, fuelExpenseService,
+  stateTaxExpenseService, fuelExpenseService, otherExpenseService,
 } from '../services/expenseService.js'
+import { ExpenseForm, validateExpenseForm, cleanForm as cleanExpenseForm } from '../pages/ExpensesPage.jsx'
 import {
   Button, Input, Select, Textarea, Modal, Table, Card, CardHeader, CardBody,
   PageHeader, SearchInput, Badge, ConfirmDialog, Alert, SectionTitle, Tabs, InfoRow, Checkbox
@@ -63,14 +64,6 @@ const emptyBookingFields = () => ({
 
 const emptyPaymentForm = () => ({
   amount: '', mode: '', receivedBy: '', paymentDate: '', notes: '', tripId: '',
-})
-
-const emptyExpenseForm = () => ({
-  type: 'fuel', date: new Date().toISOString().split('T')[0],
-  vehicleId: '', driverId: '', amount: '', totalAmount: '',
-  stateName: '', isAitpEvaluation: false,
-  amountPerDay: '', numberOfDays: '',
-  notes: '',
 })
 
 // ─── Customer phone dropdown ──────────────────────────────────────────────────
@@ -241,7 +234,9 @@ export default function EnquiriesPage() {
   const [inlineTrips, setInlineTrips] = useState([])
   const [tripForm, setTripForm] = useState(emptyTripForm())
   const [payForm, setPayForm] = useState(emptyPaymentForm())
-  const [expForm, setExpForm] = useState(emptyExpenseForm())
+  const [expForm, setExpForm] = useState({ date: new Date().toISOString().split('T')[0] })
+  const [expenseTab, setExpenseTab] = useState('fuel')
+  const [expSavedCount, setExpSavedCount] = useState(0)
   const [eErrors, setEErrors] = useState({})
   const [formError, setFormError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
@@ -396,34 +391,69 @@ export default function EnquiriesPage() {
     }, [paymentModal, user.username, refetchPayments])
   )
 
+  // ── Expense data for listing inside booking popup ─────────────────────────
+  const { data: allExpensesFuel = [], refetch: refetchExpFuel } = useAsync(fuelExpenseService.getAll)
+  const { data: allExpensesToll = [], refetch: refetchExpToll } = useAsync(tollExpenseService.getAll)
+  const { data: allExpensesParking = [], refetch: refetchExpParking } = useAsync(parkingExpenseService.getAll)
+  const { data: allExpensesAllowance = [], refetch: refetchExpAllowance } = useAsync(driverAllowanceService.getAll)
+  const { data: allExpensesStateTax = [], refetch: refetchExpStateTax } = useAsync(stateTaxExpenseService.getAll)
+  const { data: allExpensesOther = [], refetch: refetchExpOther } = useAsync(otherExpenseService.getAll)
+
+  const TAB_EXP_SERVICE = {
+    fuel: { service: fuelExpenseService, refetch: refetchExpFuel, data: allExpensesFuel },
+    toll: { service: tollExpenseService, refetch: refetchExpToll, data: allExpensesToll },
+    parking: { service: parkingExpenseService, refetch: refetchExpParking, data: allExpensesParking },
+    allowance: { service: driverAllowanceService, refetch: refetchExpAllowance, data: allExpensesAllowance },
+    stateTax: { service: stateTaxExpenseService, refetch: refetchExpStateTax, data: allExpensesStateTax },
+    other: { service: otherExpenseService, refetch: refetchExpOther, data: allExpensesOther },
+  }
+
+  const MULTI_ADD_EXP = new Set(['fuel', 'parking', 'stateTax'])
+
+  // All expenses for the current detail booking (flattened)
+  const bookingExpenses = useMemo(() => {
+    const bookingId = liveDetailEnquiry?.bookingId || liveDetailEnquiry?.enquiryId
+    if (!bookingId) return []
+    const all = [
+      ...allExpensesFuel.map((e) => ({ ...e, _type: 'Fuel' })),
+      ...allExpensesToll.map((e) => ({ ...e, _type: 'Toll' })),
+      ...allExpensesParking.map((e) => ({ ...e, _type: 'Parking' })),
+      ...allExpensesAllowance.map((e) => ({ ...e, _type: 'Allowance' })),
+      ...allExpensesStateTax.map((e) => ({ ...e, _type: 'State Tax' })),
+      ...allExpensesOther.map((e) => ({ ...e, _type: 'Other' })),
+    ]
+    return all.filter((e) => (e.bookingId === bookingId || e.enquiryId === bookingId) && e.isDeleted !== 'true')
+  }, [liveDetailEnquiry, allExpensesFuel, allExpensesToll, allExpensesParking, allExpensesAllowance, allExpensesStateTax, allExpensesOther])
+
   // ── Save Expense ──────────────────────────────────────────────────────────
   const [saveExpense, { loading: savingExpense }] = useAsyncCallback(
     useCallback(async (f) => {
+      const err = validateExpenseForm(expenseTab, f)
+      if (err) { setFormError(err); return }
       const bookingId = expenseModal?.bookingId
       const enquiryId = expenseModal?.enquiryId
-      const base = { bookingId, enquiryId }
-      switch (f.type) {
-        case 'fuel':
-          await fuelExpenseService.create({ ...base, vehicleId: f.vehicleId, driverId: f.driverId, date: f.date, amount: f.amount, notes: f.notes }, user.username)
-          break
-        case 'toll':
-          await tollExpenseService.create({ ...base, totalAmount: f.totalAmount, notes: f.notes }, user.username)
-          break
-        case 'parking':
-          await parkingExpenseService.create({ ...base, totalAmount: f.totalAmount, notes: f.notes }, user.username)
-          break
-        case 'allowance':
-          await driverAllowanceService.create({ ...base, amountPerDay: f.amountPerDay, numberOfDays: f.numberOfDays, totalAmount: f.totalAmount, notes: f.notes }, user.username)
-          break
-        case 'stateTax':
-          await stateTaxExpenseService.create({ ...base, stateName: f.stateName, date: f.date, amount: f.amount, isAitpEvaluation: f.isAitpEvaluation, notes: f.notes }, user.username)
-          break
+      const cleaned = cleanExpenseForm(expenseTab, { ...f, bookingId, enquiryId })
+      const cfg = TAB_EXP_SERVICE[expenseTab]
+      await cfg.service.create(cleaned, user.username)
+      await cfg.refetch()
+      setExpSavedCount((n) => n + 1)
+
+      if (MULTI_ADD_EXP.has(expenseTab)) {
+        // Stay open, preserve vehicle/driver
+        setExpForm((prev) => ({
+          date: new Date().toISOString().split('T')[0],
+          vehicleId: prev.vehicleId,
+          driverId: prev.driverId,
+        }))
+        setSuccessMsg('Expense saved!')
+        setTimeout(() => setSuccessMsg(''), 2000)
+      } else {
+        setExpenseModal(null)
+        setExpForm({ date: new Date().toISOString().split('T')[0] })
+        setSuccessMsg('Expense recorded.')
+        setTimeout(() => setSuccessMsg(''), 3000)
       }
-      setExpenseModal(null)
-      setExpForm(emptyExpenseForm())
-      setSuccessMsg('Expense recorded.')
-      setTimeout(() => setSuccessMsg(''), 3000)
-    }, [expenseModal, user.username])
+    }, [expenseTab, expenseModal, user.username, TAB_EXP_SERVICE, MULTI_ADD_EXP])
   )
 
   // ── Soft delete ───────────────────────────────────────────────────────────
@@ -935,12 +965,40 @@ export default function EnquiriesPage() {
 
               {/* Expenses */}
               <div className="flex items-center justify-between mt-4 mb-2">
-                <SectionTitle>Expenses</SectionTitle>
+                <SectionTitle>Expenses ({bookingExpenses.length})</SectionTitle>
                 <Button size="sm" variant="secondary" onClick={() => {
-                  setExpForm(emptyExpenseForm())
-                  setExpenseModal({ bookingId: liveDetailEnquiry.bookingId, enquiryId: liveDetailEnquiry.enquiryId })
+                  const bookingId = liveDetailEnquiry.bookingId || liveDetailEnquiry.enquiryId
+                  // Auto-fill vehicle+driver from the first trip of this booking
+                  const trip = trips.find((t) => (t.bookingId === bookingId || t.enquiryId === bookingId) && t.isDeleted !== 'true')
+                  setExpForm({
+                    date: new Date().toISOString().split('T')[0],
+                    vehicleId: trip?.allocatedVehicleId || '',
+                    driverId: trip?.allocatedDriverId || '',
+                  })
+                  setExpenseTab('fuel')
+                  setExpSavedCount(0)
+                  setExpenseModal({ bookingId, enquiryId: liveDetailEnquiry.enquiryId })
                 }}>+ Add Expense</Button>
               </div>
+              {bookingExpenses.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">No expenses recorded for this booking.</p>
+              ) : (
+                <div className="space-y-1">
+                  {bookingExpenses.map((exp) => (
+                    <div key={exp.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-blue-50 text-blue-700 text-xs">{exp._type}</Badge>
+                        <span className="font-medium">{formatCurrency(exp.amount || exp.totalAmount)}</span>
+                        {exp.stateName && <span className="text-gray-500">· {exp.stateName}</span>}
+                        {exp.driverId && <span className="text-gray-400">· {drivers.find(d => d.id === exp.driverId)?.name || exp.driverId}</span>}
+                        {exp.isNightCharge === 'true' && <Badge className="bg-indigo-50 text-indigo-600 text-xs">🌙</Badge>}
+                        {exp.isAitpEvaluation === 'aitp' && <Badge className="bg-purple-50 text-purple-600 text-xs">AITP</Badge>}
+                        <span className="text-gray-400">{formatDate(exp.date)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })()}
@@ -1033,67 +1091,70 @@ export default function EnquiriesPage() {
       </Modal>
 
       {/* ── Expense Modal ──────────────────────────────────────────────────────── */}
-      <Modal open={!!expenseModal} onClose={() => setExpenseModal(null)} title="Add Expense" size="lg">
-        <form onSubmit={async (e) => {
-          e.preventDefault()
-          setFormError('')
-          try { await saveExpense(expForm) } catch (err) { setFormError(err.message) }
-        }} className="space-y-4">
-          {formError && <Alert type="error" message={formError} />}
+      <Modal open={!!expenseModal} onClose={() => { setExpenseModal(null); setExpSavedCount(0) }} title="Add Expense" size="xl">
+        {expenseModal && (
+          <form onSubmit={async (e) => {
+            e.preventDefault()
+            setFormError('')
+            try { await saveExpense(expForm) } catch (err) { setFormError(err.message) }
+          }} className="space-y-4">
+            {formError && <Alert type="error" message={formError} />}
+            {expSavedCount > 0 && (
+              <Alert type="success" message={`${expSavedCount} expense${expSavedCount > 1 ? 's' : ''} saved. Add another or close.`} />
+            )}
 
-          <Select
-            label="Expense Type"
-            required
-            options={[
-              { value: 'fuel', label: 'Fuel' },
-              { value: 'toll', label: 'Toll' },
-              { value: 'parking', label: 'Parking' },
-              { value: 'allowance', label: 'Driver Allowance' },
-              { value: 'stateTax', label: 'State Tax' },
-            ]}
-            value={expForm.type}
-            onChange={(e) => setExpForm(f => ({ ...f, type: e.target.value }))}
-          />
+            {/* Expense type tabs */}
+            <div className="flex flex-wrap gap-1 border-b border-gray-100 pb-3">
+              {[
+                { key: 'fuel', label: 'Fuel' },
+                { key: 'toll', label: 'Toll' },
+                { key: 'parking', label: 'Parking' },
+                { key: 'allowance', label: 'Allowance' },
+                { key: 'stateTax', label: 'State Tax' },
+                { key: 'other', label: 'Other' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => {
+                    setExpenseTab(t.key)
+                    // Keep vehicle+driver when switching tabs
+                    setExpForm((prev) => ({
+                      date: new Date().toISOString().split('T')[0],
+                      vehicleId: prev.vehicleId,
+                      driverId: prev.driverId,
+                    }))
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+                    ${expenseTab === t.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-          {expForm.type === 'fuel' && (
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Date" required type="date" value={expForm.date} onChange={(e) => setExpForm(f => ({ ...f, date: e.target.value }))} />
-              <Select label="Vehicle" required options={vehicleOptions} value={expForm.vehicleId} onChange={(e) => setExpForm(f => ({ ...f, vehicleId: e.target.value }))} placeholder="Select vehicle..." />
-              <Select label="Driver" required options={driverOptions} value={expForm.driverId} onChange={(e) => setExpForm(f => ({ ...f, driverId: e.target.value }))} placeholder="Select driver..." />
-              <Input label="Amount (₹)" required type="number" value={expForm.amount} onChange={(e) => setExpForm(f => ({ ...f, amount: e.target.value }))} />
-              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-          )}
-          {(expForm.type === 'toll' || expForm.type === 'parking') && (
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Total Amount (₹)" required type="number" value={expForm.totalAmount} onChange={(e) => setExpForm(f => ({ ...f, totalAmount: e.target.value }))} />
-              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-          )}
-          {expForm.type === 'allowance' && (
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Amount Per Day (₹)" required type="number" value={expForm.amountPerDay} onChange={(e) => setExpForm(f => ({ ...f, amountPerDay: e.target.value }))} />
-              <Input label="Number of Days" required type="number" value={expForm.numberOfDays} onChange={(e) => setExpForm(f => ({ ...f, numberOfDays: e.target.value }))} />
-              <Input label="Total Amount (₹)" type="number" value={expForm.totalAmount} onChange={(e) => setExpForm(f => ({ ...f, totalAmount: e.target.value }))} />
-              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-          )}
-          {expForm.type === 'stateTax' && (
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="State Name" required value={expForm.stateName} onChange={(e) => setExpForm(f => ({ ...f, stateName: e.target.value }))} />
-              <Input label="Date" required type="date" value={expForm.date} onChange={(e) => setExpForm(f => ({ ...f, date: e.target.value }))} />
-              <Input label="Amount (₹)" required type="number" value={expForm.amount} onChange={(e) => setExpForm(f => ({ ...f, amount: e.target.value }))} />
-              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
-              <Checkbox label="AITP Evaluation Only (not actually paid)" checked={!!expForm.isAitpEvaluation}
-                onChange={(e) => setExpForm(f => ({ ...f, isAitpEvaluation: e.target.checked }))} className="col-span-2" />
-            </div>
-          )}
+            <ExpenseForm
+              tab={expenseTab}
+              form={expForm}
+              setForm={setExpForm}
+              vehicles={vehicles}
+              drivers={drivers}
+              enquiries={enquiries}
+              trips={trips}
+              context="booking"
+              bookingContext={expenseModal}
+            />
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setExpenseModal(null)}>Cancel</Button>
-            <Button type="submit" loading={savingExpense}>Record Expense</Button>
-          </div>
-        </form>
+            <div className="flex justify-between items-center pt-2">
+              <Button type="button" variant="secondary" onClick={() => { setExpenseModal(null); setExpSavedCount(0) }}>
+                {expSavedCount > 0 ? 'Done' : 'Cancel'}
+              </Button>
+              <Button type="submit" loading={savingExpense}>
+                {['fuel', 'parking', 'stateTax'].includes(expenseTab) ? 'Save & Add Another' : 'Record Expense'}
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* ── Delete confirm ────────────────────────────────────────────────────── */}
