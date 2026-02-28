@@ -510,7 +510,7 @@ const TAB_SERVICE = {
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
-function validateExpenseForm(tab, form) {
+export function validateExpenseForm(tab, form) {
   // State tax: must pick AITP radio
   if (tab === 'stateTax' && !form.isAitpEvaluation) {
     return 'Please select whether this is Actually Paid or AITP Evaluation Only.'
