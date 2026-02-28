@@ -9,6 +9,10 @@ import { getVehicles } from '../services/vehicleService.js'
 import { getDrivers } from '../services/driverService.js'
 import { getPayments, createPayment, verifyPayment } from '../services/paymentService.js'
 import {
+  driverAllowanceService, tollExpenseService, parkingExpenseService,
+  stateTaxExpenseService, fuelExpenseService,
+} from '../services/expenseService.js'
+import {
   Button, Input, Select, Textarea, Modal, Table, Card, CardHeader, CardBody,
   PageHeader, SearchInput, Badge, ConfirmDialog, Alert, SectionTitle, Tabs, InfoRow, Checkbox
 } from '../components/ui/index.jsx'
@@ -27,93 +31,51 @@ const STATUS_TABS = [
   { key: 'Ongoing', label: 'Ongoing' },
   { key: 'Completed', label: 'Completed' },
   { key: 'Cancelled', label: 'Cancelled' },
+  { key: 'deleted', label: 'Deleted' },
 ]
 
-// Agent types where customer phone/name is required
 const DIRECT_AGENT_TYPES = ['self', 'google_ads']
 
 // ─── Empty form factories ─────────────────────────────────────────────────────
 
 const emptyEnquiryForm = () => ({
-  // Customer
-  customerPhone: '',
-  customerName: '',
-  customerId: '',
-  // Agent
+  customerPhone: '', customerName: '', customerId: '',
   agentId: '',
-  // Guest (person actually travelling)
-  guestName: '',
-  guestPhone: '',
-  // Alternate contact
-  alternateContactName: '',
-  alternateContactPhone: '',
-  // Trip basics (optional at enquiry stage)
-  pickupDateTime: '',
-  pickupLocation: '',
-  dropLocation: '',
-  trainFlightNumber: '',
-  customerRequests: '',
-  notes: '',
-  enquiryQuote: '',
+  guestName: '', guestPhone: '',
+  alternateContactName: '', alternateContactPhone: '',
+  customerRequests: '', notes: '', enquiryQuote: '',
 })
 
 const emptyTripForm = () => ({
-  tripType: '',
-  localSubType: '',
-  vehicleType: '',
-  startDate: '',
-  endDate: '',
-  travelPlan: '',
-  isVendorTrip: false,
-  vendorName: '',
-  vendorPhone: '',
-  vendorCommission: '',
-  pickupDateTime: '',
-  pickupLocation: '',
-  dropLocation: '',
-  allocatedVehicleId: '',
-  allocatedVehicleNumber: '',
-  allocatedVehicleType: '',
-  allocatedVehicleSeating: '',
-  allocatedDriverId: '',
-  allocatedDriverName: '',
-  allocatedDriverPhone: '',
-  totalAmount: '',
-  amountReceived: '',
-  amountPending: '',
-  notes: '',
-  customerRequests: '',
-  trainFlightNumber: '',
+  tripType: '', localSubType: '', vehicleType: '',
+  startDate: '', endDate: '', travelPlan: '',
+  isVendorTrip: false, vendorName: '', vendorPhone: '', vendorCommission: '',
+  pickupDateTime: '', pickupLocation: '', dropLocation: '',
+  allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '',
+  allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '',
+  notes: '', customerRequests: '', trainFlightNumber: '',
 })
 
-const emptyBookingForm = () => ({
-  customerName: '',
-  customerId: '',
-  pickupDateTime: '',
-  pickupLocation: '',
-  dropLocation: '',
-  trainFlightNumber: '',
-  customerRequests: '',
-  notes: '',
-  enquiryQuote: '',
-  bookingQuote: '',
-  totalAmount: '',
-  amountReceived: '',
-  amountPending: '',
-  agentId: '',
-  guestName: '',
-  guestPhone: '',
-  alternateContactName: '',
-  alternateContactPhone: '',
+const emptyBookingFields = () => ({
+  bookingQuote: '', totalAmount: '', amountReceived: '', amountPending: '',
+  pickupDateTime: '', pickupLocation: '', dropLocation: '', trainFlightNumber: '',
 })
 
 const emptyPaymentForm = () => ({
-  amount: '', mode: '', receivedBy: '', paymentDate: '', notes: '', tripId: '', bookingId: '',
+  amount: '', mode: '', receivedBy: '', paymentDate: '', notes: '', tripId: '',
 })
 
-// ─── Customer match banner ────────────────────────────────────────────────────
+const emptyExpenseForm = () => ({
+  type: 'fuel', date: new Date().toISOString().split('T')[0],
+  vehicleId: '', driverId: '', amount: '', totalAmount: '',
+  stateName: '', isAitpEvaluation: false,
+  amountPerDay: '', numberOfDays: '',
+  notes: '',
+})
 
-function CustomerMatchDropdown({ phone, customers, onSelect }) {
+// ─── Customer phone dropdown ──────────────────────────────────────────────────
+
+function CustomerMatchDropdown({ phone, customers, onSelect, visible }) {
   const matches = useMemo(() => {
     if (!phone || phone.length < 5) return []
     const q = phone.trim()
@@ -122,30 +84,26 @@ function CustomerMatchDropdown({ phone, customers, onSelect }) {
     ).slice(0, 5)
   }, [phone, customers])
 
-  if (matches.length === 0) return null
+  if (!visible || matches.length === 0) return null
 
   return (
     <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-blue-200 rounded-lg shadow-lg overflow-hidden">
       <p className="px-3 py-1.5 text-xs text-blue-600 bg-blue-50 font-medium">Existing customers matched</p>
       {matches.map((c) => (
-        <button
-          key={c.id}
-          type="button"
-          onClick={() => onSelect(c)}
-          className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
-        >
+        <button key={c.id} type="button" onMouseDown={() => onSelect(c)}
+          className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0">
           <p className="text-sm font-medium text-gray-900">{c.name}</p>
-          <p className="text-xs text-gray-400">{c.phone}{c.customerStatus === 'repeating' ? ' · Repeating Customer ⭐' : ''}</p>
+          <p className="text-xs text-gray-400">{c.phone}{c.customerStatus === 'repeating' ? ' · ⭐ Repeating' : ''}</p>
         </button>
       ))}
     </div>
   )
 }
 
-// ─── Inline trip editor (used inside enquiry form) ────────────────────────────
+// ─── Inline trip editor ───────────────────────────────────────────────────────
 
-function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers }) {
-  const [open, setOpen] = useState(false)
+function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDefault = false }) {
+  const [open, setOpen] = useState(openByDefault)
   const [form, setForm] = useState(emptyTripForm())
 
   const vehicleOptions = vehicles.map((v) => ({ value: v.id, label: `${v.registrationNumber} - ${v.seater}` }))
@@ -153,34 +111,17 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers }) {
 
   const handleVehicleSelect = (vehicleId) => {
     const v = vehicles.find((v) => v.id === vehicleId)
-    if (v) {
-      setForm((f) => ({
-        ...f,
-        allocatedVehicleId: v.id,
-        allocatedVehicleNumber: v.registrationNumber,
-        allocatedVehicleType: v.seater,
-        allocatedVehicleSeating: v.seater,
-      }))
-    } else {
-      setForm((f) => ({ ...f, allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '' }))
-    }
+    if (v) setForm((f) => ({ ...f, allocatedVehicleId: v.id, allocatedVehicleNumber: v.registrationNumber, allocatedVehicleType: v.seater, allocatedVehicleSeating: v.seater }))
+    else setForm((f) => ({ ...f, allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '' }))
   }
 
   const handleDriverSelect = (driverId) => {
     const d = drivers.find((d) => d.id === driverId)
-    if (d) {
-      setForm((f) => ({ ...f, allocatedDriverId: d.id, allocatedDriverName: d.name, allocatedDriverPhone: d.phone }))
-    } else {
-      setForm((f) => ({ ...f, allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '' }))
-    }
+    if (d) setForm((f) => ({ ...f, allocatedDriverId: d.id, allocatedDriverName: d.name, allocatedDriverPhone: d.phone }))
+    else setForm((f) => ({ ...f, allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '' }))
   }
 
-  const handleAdd = () => {
-    if (!form.tripType || !form.vehicleType) return
-    onAdd({ ...form, _tempId: generateId() })
-    setForm(emptyTripForm())
-    setOpen(false)
-  }
+  const hasPartialData = form.tripType || form.vehicleType || form.startDate || form.pickupLocation
 
   return (
     <div>
@@ -191,7 +132,6 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers }) {
         </Button>
       </div>
 
-      {/* Existing trips */}
       {trips.length > 0 && (
         <div className="space-y-2 mb-3">
           {trips.map((trip, i) => (
@@ -209,52 +149,29 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers }) {
         </div>
       )}
 
-      {/* Trip add form */}
       {open && (
         <div className="border border-blue-100 rounded-xl bg-blue-50/30 p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Trip Type *"
-              options={TRIP_TYPE_OPTIONS}
-              value={form.tripType}
-              onChange={(e) => setForm(f => ({ ...f, tripType: e.target.value }))}
-              placeholder="Select..."
-            />
+            <Select label="Trip Type *" options={TRIP_TYPE_OPTIONS} value={form.tripType} onChange={(e) => setForm(f => ({ ...f, tripType: e.target.value }))} placeholder="Select..." />
             {form.tripType === 'Delhi/NCR Local' && (
-              <Select
-                label="Local Sub-type"
-                options={LOCAL_SUB_TYPE_OPTIONS}
-                value={form.localSubType}
-                onChange={(e) => setForm(f => ({ ...f, localSubType: e.target.value }))}
-                placeholder="Select..."
-              />
+              <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={form.localSubType} onChange={(e) => setForm(f => ({ ...f, localSubType: e.target.value }))} placeholder="Select..." />
             )}
-            <Select
-              label="Vehicle Type *"
-              options={VEHICLE_TYPE_OPTIONS}
-              value={form.vehicleType}
-              onChange={(e) => setForm(f => ({ ...f, vehicleType: e.target.value }))}
-              placeholder="Select..."
-            />
+            <Select label="Vehicle Type *" options={VEHICLE_TYPE_OPTIONS} value={form.vehicleType} onChange={(e) => setForm(f => ({ ...f, vehicleType: e.target.value }))} placeholder="Select..." />
             <Input label="Start Date" type="date" value={form.startDate} onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" value={form.endDate} onChange={(e) => setForm(f => ({ ...f, endDate: e.target.value }))} />
             <Input label="Pickup Date & Time" type="datetime-local" value={form.pickupDateTime} onChange={(e) => setForm(f => ({ ...f, pickupDateTime: e.target.value }))} />
             <Input label="Pickup Location" value={form.pickupLocation} onChange={(e) => setForm(f => ({ ...f, pickupLocation: e.target.value }))} />
             <Input label="Drop Location" value={form.dropLocation} onChange={(e) => setForm(f => ({ ...f, dropLocation: e.target.value }))} />
+            <Input label="Train / Flight No." value={form.trainFlightNumber} onChange={(e) => setForm(f => ({ ...f, trainFlightNumber: e.target.value }))} />
+            <Input label="Travel Plan" value={form.travelPlan} onChange={(e) => setForm(f => ({ ...f, travelPlan: e.target.value }))} />
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <Select label="Allocate Vehicle (Fleet)" options={vehicleOptions} value={form.allocatedVehicleId} onChange={(e) => handleVehicleSelect(e.target.value)} placeholder="From fleet..." />
             <Input label="Or Manual Vehicle No." value={form.allocatedVehicleNumber} onChange={(e) => setForm(f => ({ ...f, allocatedVehicleNumber: e.target.value }))} />
             <Select label="Allocate Driver" options={driverOptions} value={form.allocatedDriverId} onChange={(e) => handleDriverSelect(e.target.value)} placeholder="From drivers..." />
             <Input label="Or Manual Driver Name" value={form.allocatedDriverName} onChange={(e) => setForm(f => ({ ...f, allocatedDriverName: e.target.value }))} />
           </div>
-
-          <Checkbox
-            label="Vendor Trip"
-            checked={form.isVendorTrip === true}
-            onChange={(e) => setForm(f => ({ ...f, isVendorTrip: e.target.checked }))}
-          />
+          <Checkbox label="Vendor Trip" checked={form.isVendorTrip === true} onChange={(e) => setForm(f => ({ ...f, isVendorTrip: e.target.checked }))} />
           {form.isVendorTrip && (
             <div className="grid grid-cols-3 gap-3">
               <Input label="Vendor Name" value={form.vendorName} onChange={(e) => setForm(f => ({ ...f, vendorName: e.target.value }))} />
@@ -262,20 +179,22 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers }) {
               <Input label="Our Commission" value={form.vendorCommission} onChange={(e) => setForm(f => ({ ...f, vendorCommission: e.target.value }))} />
             </div>
           )}
-
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleAdd}
-              disabled={!form.tripType || !form.vehicleType}
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={() => { setOpen(false); setForm(emptyTripForm()) }}>Cancel</Button>
+            <Button type="button" size="sm" onClick={() => {
+              if (!form.tripType || !form.vehicleType) return
+              onAdd({ ...form, _tempId: generateId() })
+              setForm(emptyTripForm())
+              setOpen(false)
+            }} disabled={!form.tripType || !form.vehicleType}>
               Add Trip
             </Button>
           </div>
         </div>
       )}
+
+      {/* expose whether the form has partial unsaved data */}
+      <input type="hidden" data-partial={hasPartialData ? 'true' : 'false'} data-open={open ? 'true' : 'false'} id="trip-editor-state" />
     </div>
   )
 }
@@ -293,93 +212,125 @@ export default function EnquiriesPage() {
   const { data: drivers = [] } = useAsync(getDrivers)
   const { data: allPayments = [], refetch: refetchPayments } = useAsync(getPayments)
 
+  // ── Tab / filter state ────────────────────────────────────────────────────
   const [tab, setTab] = useState('all')
   const [search, setSearch] = useState('')
+  const [filterAgent, setFilterAgent] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [filterPendingOnly, setFilterPendingOnly] = useState(false)
+  const [filterBookingsOnly, setFilterBookingsOnly] = useState(false)
+  const [filterEnquiriesOnly, setFilterEnquiriesOnly] = useState(false)
 
-  // Modal states
+  // ── Modal states ──────────────────────────────────────────────────────────
   const [enquiryModal, setEnquiryModal] = useState(false)
   const [editEnquiry, setEditEnquiry] = useState(null)
   const [detailEnquiry, setDetailEnquiry] = useState(null)
-  const [confirmModal, setConfirmModal] = useState(false)
   const [tripModal, setTripModal] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [paymentModal, setPaymentModal] = useState(null)
-  const [statusModal, setStatusModal] = useState(null)
+  const [expenseModal, setExpenseModal] = useState(null)
+  const [noTripConfirm, setNoTripConfirm] = useState(false)
+  const [unsavedTripConfirm, setUnsavedTripConfirm] = useState(false)
+  const [pendingSubmitData, setPendingSubmitData] = useState(null)
 
-  // Form states
+  // ── Form states ───────────────────────────────────────────────────────────
   const [eForm, setEForm] = useState(emptyEnquiryForm())
-  const [inlineTrips, setInlineTrips] = useState([]) // trips added in enquiry form before save
-  const [bForm, setBForm] = useState(emptyBookingForm())
+  const [convertToBooking, setConvertToBooking] = useState(false)
+  const [bookingFields, setBookingFields] = useState(emptyBookingFields())
+  const [inlineTrips, setInlineTrips] = useState([])
   const [tripForm, setTripForm] = useState(emptyTripForm())
   const [payForm, setPayForm] = useState(emptyPaymentForm())
+  const [expForm, setExpForm] = useState(emptyExpenseForm())
   const [eErrors, setEErrors] = useState({})
   const [formError, setFormError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+  const [phoneFieldFocused, setPhoneFieldFocused] = useState(false)
+  const [bPhoneFieldFocused, setBPhoneFieldFocused] = useState(false)
 
-  // ─── Derived data ────────────────────────────────────────────────────────────
-
+  // ── Derived ───────────────────────────────────────────────────────────────
   const agentOptions = agents.map((a) => ({ value: a.id, label: a.name }))
-  const customerOptions = customers.map((c) => ({ value: c.id, label: `${c.name} (${c.phone})` }))
   const vehicleOptions = vehicles.map((v) => ({ value: v.id, label: `${v.registrationNumber} - ${v.seater}` }))
   const driverOptions = drivers.map((d) => ({ value: d.id, label: `${d.name} (${d.phone})` }))
 
-  // Determine selected agent type
   const selectedAgent = agents.find((a) => a.id === eForm.agentId)
-  const isDirectAgent = selectedAgent ? DIRECT_AGENT_TYPES.includes(selectedAgent.agentType) : false
+  const isDirectAgent = DIRECT_AGENT_TYPES.includes(selectedAgent?.agentType)
   const isAgentBooking = selectedAgent?.agentType === 'other_business'
 
-  // Same for booking form
-  const selectedAgentForBooking = agents.find((a) => a.id === (bForm.agentId || detailEnquiry?.agentId))
-  const isDirectAgentBooking = selectedAgentForBooking ? DIRECT_AGENT_TYPES.includes(selectedAgentForBooking.agentType) : false
+  // Keep detailEnquiry in sync with latest enquiries data
+  const liveDetailEnquiry = useMemo(() => {
+    if (!detailEnquiry) return null
+    return enquiries.find((e) => e.enquiryId === detailEnquiry.enquiryId) || detailEnquiry
+  }, [detailEnquiry, enquiries])
 
+  // ── Filtered list ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return enquiries
-      .filter((e) => tab === 'all' || e.status === tab)
-      .filter(
-        (e) =>
-          e.enquiryId?.toLowerCase().includes(q) ||
-          e.customerName?.toLowerCase().includes(q) ||
-          e.customerPhone?.toLowerCase().includes(q) ||
-          e.bookingId?.toLowerCase().includes(q) ||
-          e.guestName?.toLowerCase().includes(q)
-      )
-  }, [enquiries, tab, search])
+    return enquiries.filter((e) => {
+      // Deleted tab
+      if (tab === 'deleted') return e.isDeleted === 'true'
+      if (e.isDeleted === 'true') return false
+
+      // Status tab
+      if (tab !== 'all' && e.status !== tab) return false
+
+      // Search
+      if (q && !(
+        e.enquiryId?.toLowerCase().includes(q) ||
+        e.customerName?.toLowerCase().includes(q) ||
+        e.customerPhone?.toLowerCase().includes(q) ||
+        e.bookingId?.toLowerCase().includes(q) ||
+        e.guestName?.toLowerCase().includes(q)
+      )) return false
+
+      // Agent filter
+      if (filterAgent && e.agentId !== filterAgent) return false
+
+      // Date filter (by createdAt)
+      if (filterDateFrom && e.createdAt && e.createdAt < filterDateFrom) return false
+      if (filterDateTo && e.createdAt && e.createdAt.split('T')[0] > filterDateTo) return false
+
+      // Pending payments only
+      if (filterPendingOnly && !(parseFloat(e.amountPending) > 0)) return false
+
+      // Bookings only
+      if (filterBookingsOnly && !e.bookingId) return false
+
+      // Enquiries only (no booking ID)
+      if (filterEnquiriesOnly && e.bookingId) return false
+
+      return true
+    })
+  }, [enquiries, tab, search, filterAgent, filterDateFrom, filterDateTo, filterPendingOnly, filterBookingsOnly, filterEnquiriesOnly])
 
   const tabsWithCounts = STATUS_TABS.map((t) => ({
     ...t,
-    count: t.key === 'all' ? enquiries.length : enquiries.filter((e) => e.status === t.key).length,
+    count: t.key === 'deleted'
+      ? enquiries.filter((e) => e.isDeleted === 'true').length
+      : t.key === 'all'
+        ? enquiries.filter((e) => e.isDeleted !== 'true').length
+        : enquiries.filter((e) => e.status === t.key && e.isDeleted !== 'true').length,
   }))
 
-  // ─── Phone auto-detect: when phone changes, check existing customers ─────────
+  const hasActiveFilters = filterAgent || filterDateFrom || filterDateTo || filterPendingOnly || filterBookingsOnly || filterEnquiriesOnly
 
-  const handlePhoneChange = (phone) => {
-    setEForm(f => ({ ...f, customerPhone: phone, customerId: '', customerName: f.customerName }))
-  }
-
-  const handleCustomerSelect = (customer) => {
-    setEForm(f => ({
-      ...f,
-      customerId: customer.id,
-      customerName: customer.name,
-      customerPhone: customer.phone,
-    }))
-  }
-
-  // ─── Save Enquiry (with optional inline trips) ────────────────────────────────
-
+  // ── Save Enquiry ──────────────────────────────────────────────────────────
   const [saveEnquiry, { loading: savingEnquiry }] = useAsyncCallback(
-    useCallback(async (f, tripsToCreate) => {
-      let enquiryRecord
+    useCallback(async (f, tripsToCreate, isBooking, bFields) => {
+      let savedEnquiryId = editEnquiry?.enquiryId
+
       if (editEnquiry) {
         await updateEnquiry(editEnquiry.enquiryId, f, user.username)
-        enquiryRecord = { enquiryId: editEnquiry.enquiryId }
       } else {
-        enquiryRecord = await createEnquiry(f, user.username)
+        const res = await createEnquiry(
+          { ...f, isAgentBooking: isAgentBooking ? 'true' : 'false' },
+          user.username
+        )
+        savedEnquiryId = res?.data?.enquiryId
       }
 
-      // Handle customer creation/update for direct agents
-      if (!f.customerId && f.customerPhone && (isDirectAgent || !isAgentBooking)) {
+      // Auto-create customer for direct agents
+      if (!f.customerId && f.customerPhone && isDirectAgent) {
         const existing = customers.find((c) => c.phone === f.customerPhone)
         if (!existing) {
           await createCustomer({ name: f.customerName || '', phone: f.customerPhone }, user.username)
@@ -387,72 +338,46 @@ export default function EnquiriesPage() {
         }
       }
 
-      // Save any inline trips
-      if (tripsToCreate && tripsToCreate.length > 0 && !editEnquiry) {
-        const enquiryId = enquiryRecord?.data?.enquiryId || enquiryRecord?.enquiryId
-        if (enquiryId) {
-          for (const trip of tripsToCreate) {
-            const { _tempId, ...tripData } = trip
-            await createTrip({ ...tripData, enquiryId, bookingId: '' }, user.username)
-          }
-          await refetchTrips()
+      // If converting to booking, call confirmBooking
+      if (isBooking && savedEnquiryId) {
+        await confirmBooking(savedEnquiryId, { ...f, ...bFields }, user.username)
+      }
+
+      // Save inline trips
+      if (tripsToCreate?.length > 0 && savedEnquiryId) {
+        for (const trip of tripsToCreate) {
+          const { _tempId, ...tripData } = trip
+          await createTrip({ ...tripData, enquiryId: savedEnquiryId, bookingId: '' }, user.username)
         }
+        await refetchTrips()
       }
 
       await refetchEnquiries()
       setEnquiryModal(false)
       setInlineTrips([])
-      setSuccessMsg(editEnquiry ? 'Enquiry updated.' : 'Enquiry created.')
+      setConvertToBooking(false)
+      setBookingFields(emptyBookingFields())
+      setSuccessMsg(editEnquiry ? 'Enquiry updated.' : isBooking ? 'Booking created!' : 'Enquiry created.')
       setTimeout(() => setSuccessMsg(''), 3000)
     }, [editEnquiry, user.username, refetchEnquiries, refetchTrips, refetchCustomers, customers, isDirectAgent, isAgentBooking])
   )
 
-  // ─── Confirm Booking ─────────────────────────────────────────────────────────
-
-  const [doConfirm, { loading: confirming }] = useAsyncCallback(
-    useCallback(async (f) => {
-      let customerId = f.customerId
-
-      // For direct agent bookings, always ensure customer exists
-      if (isDirectAgentBooking && !customerId && f.customerName && f.customerPhone) {
-        const existing = customers.find((c) => c.phone === f.customerPhone)
-        if (existing) {
-          customerId = existing.id
-          // If returning, mark as repeating
-          if (existing.customerStatus !== 'repeating') {
-            const prevBookings = enquiries.filter(e => e.customerId === existing.id && e.bookingId)
-            if (prevBookings.length > 0) {
-              await updateCustomer(existing.id, { customerStatus: 'repeating' }, user.username)
-            }
-          }
-        } else {
-          const res = await createCustomer(
-            { name: f.customerName, phone: f.customerPhone, customerStatus: 'active' },
-            user.username
-          )
-          customerId = res?.data?.id
-          await refetchCustomers()
-        }
-      }
-
-      await confirmBooking(detailEnquiry.enquiryId, { ...f, customerId }, user.username)
+  // ── Status update — updates live detail immediately ───────────────────────
+  const [doStatusUpdate, { loading: updatingStatus }] = useAsyncCallback(
+    useCallback(async (newStatus) => {
+      const enquiryId = detailEnquiry?.enquiryId
+      await updateEnquiry(enquiryId, { status: newStatus }, user.username)
       await refetchEnquiries()
-      setConfirmModal(false)
-      setDetailEnquiry(null)
-      setSuccessMsg('Booking confirmed!')
-      setTimeout(() => setSuccessMsg(''), 3000)
-    }, [detailEnquiry, customers, enquiries, user.username, refetchEnquiries, refetchCustomers, isDirectAgentBooking])
+      // Update detailEnquiry in-place so the popup reflects the change immediately
+      setDetailEnquiry((prev) => prev ? { ...prev, status: newStatus } : prev)
+    }, [detailEnquiry, user.username, refetchEnquiries])
   )
 
-  // ─── Save Trip ────────────────────────────────────────────────────────────────
-
+  // ── Save Trip ─────────────────────────────────────────────────────────────
   const [saveTrip, { loading: savingTrip }] = useAsyncCallback(
     useCallback(async (f, enquiryId, bookingId, editTrip) => {
-      if (editTrip) {
-        await updateTrip(editTrip.id, f, user.username)
-      } else {
-        await createTrip({ ...f, enquiryId, bookingId }, user.username)
-      }
+      if (editTrip) await updateTrip(editTrip.id, f, user.username)
+      else await createTrip({ ...f, enquiryId, bookingId }, user.username)
       await refetchTrips()
       setTripModal(null)
       setSuccessMsg('Trip saved.')
@@ -460,11 +385,10 @@ export default function EnquiriesPage() {
     }, [user.username, refetchTrips])
   )
 
-  // ─── Save Payment ─────────────────────────────────────────────────────────────
-
+  // ── Save Payment ──────────────────────────────────────────────────────────
   const [savePayment, { loading: savingPayment }] = useAsyncCallback(
     useCallback(async (f) => {
-      await createPayment({ ...f, bookingId: paymentModal.bookingId, tripId: paymentModal.tripId }, user.username)
+      await createPayment({ ...f, bookingId: paymentModal.bookingId }, user.username)
       await refetchPayments()
       setPaymentModal(null)
       setSuccessMsg('Payment recorded.')
@@ -472,20 +396,37 @@ export default function EnquiriesPage() {
     }, [paymentModal, user.username, refetchPayments])
   )
 
-  // ─── Status update ────────────────────────────────────────────────────────────
-
-  const [doStatusUpdate, { loading: updatingStatus }] = useAsyncCallback(
-    useCallback(async (newStatus) => {
-      await updateEnquiry(statusModal.enquiryId, { status: newStatus }, user.username)
-      await refetchEnquiries()
-      setStatusModal(null)
-      setSuccessMsg('Status updated.')
+  // ── Save Expense ──────────────────────────────────────────────────────────
+  const [saveExpense, { loading: savingExpense }] = useAsyncCallback(
+    useCallback(async (f) => {
+      const bookingId = expenseModal?.bookingId
+      const enquiryId = expenseModal?.enquiryId
+      const base = { bookingId, enquiryId }
+      switch (f.type) {
+        case 'fuel':
+          await fuelExpenseService.create({ ...base, vehicleId: f.vehicleId, driverId: f.driverId, date: f.date, amount: f.amount, notes: f.notes }, user.username)
+          break
+        case 'toll':
+          await tollExpenseService.create({ ...base, totalAmount: f.totalAmount, notes: f.notes }, user.username)
+          break
+        case 'parking':
+          await parkingExpenseService.create({ ...base, totalAmount: f.totalAmount, notes: f.notes }, user.username)
+          break
+        case 'allowance':
+          await driverAllowanceService.create({ ...base, amountPerDay: f.amountPerDay, numberOfDays: f.numberOfDays, totalAmount: f.totalAmount, notes: f.notes }, user.username)
+          break
+        case 'stateTax':
+          await stateTaxExpenseService.create({ ...base, stateName: f.stateName, date: f.date, amount: f.amount, isAitpEvaluation: f.isAitpEvaluation, notes: f.notes }, user.username)
+          break
+      }
+      setExpenseModal(null)
+      setExpForm(emptyExpenseForm())
+      setSuccessMsg('Expense recorded.')
       setTimeout(() => setSuccessMsg(''), 3000)
-    }, [statusModal, user.username, refetchEnquiries])
+    }, [expenseModal, user.username])
   )
 
-  // ─── Soft delete ──────────────────────────────────────────────────────────────
-
+  // ── Soft delete ───────────────────────────────────────────────────────────
   const [doDelete] = useAsyncCallback(
     useCallback(async () => {
       await softDeleteEnquiry(deleteTarget.enquiryId, user.username)
@@ -494,8 +435,7 @@ export default function EnquiriesPage() {
     }, [deleteTarget, user.username, refetchEnquiries])
   )
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────────
-
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const getEnquiryTrips = useCallback(
     (enquiryId) => trips.filter((t) => t.enquiryId === enquiryId || t.bookingId === enquiryId),
     [trips]
@@ -505,34 +445,24 @@ export default function EnquiriesPage() {
     [allPayments]
   )
 
-  const handleVehicleSelect = (vehicleId) => {
+  const handleVehicleSelect = (vehicleId, setter) => {
     const v = vehicles.find((v) => v.id === vehicleId)
-    if (v) {
-      setTripForm((f) => ({
-        ...f,
-        allocatedVehicleId: v.id,
-        allocatedVehicleNumber: v.registrationNumber,
-        allocatedVehicleType: v.seater,
-        allocatedVehicleSeating: v.seater,
-      }))
-    } else {
-      setTripForm((f) => ({ ...f, allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '' }))
-    }
+    if (v) setter((f) => ({ ...f, allocatedVehicleId: v.id, allocatedVehicleNumber: v.registrationNumber, allocatedVehicleType: v.seater, allocatedVehicleSeating: v.seater }))
+    else setter((f) => ({ ...f, allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '' }))
   }
 
-  const handleDriverSelect = (driverId) => {
+  const handleDriverSelect = (driverId, setter) => {
     const d = drivers.find((d) => d.id === driverId)
-    if (d) {
-      setTripForm((f) => ({ ...f, allocatedDriverId: d.id, allocatedDriverName: d.name, allocatedDriverPhone: d.phone }))
-    } else {
-      setTripForm((f) => ({ ...f, allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '' }))
-    }
+    if (d) setter((f) => ({ ...f, allocatedDriverId: d.id, allocatedDriverName: d.name, allocatedDriverPhone: d.phone }))
+    else setter((f) => ({ ...f, allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '' }))
   }
 
   const openNewEnquiry = () => {
     setEditEnquiry(null)
     setEForm(emptyEnquiryForm())
     setInlineTrips([])
+    setConvertToBooking(false)
+    setBookingFields(emptyBookingFields())
     setEErrors({})
     setFormError('')
     setEnquiryModal(true)
@@ -541,54 +471,66 @@ export default function EnquiriesPage() {
   const openEditEnquiry = (e) => {
     setEditEnquiry(e)
     setEForm({
-      customerPhone: e.customerPhone || '',
-      customerName: e.customerName || '',
-      customerId: e.customerId || '',
-      agentId: e.agentId || '',
-      guestName: e.guestName || '',
-      guestPhone: e.guestPhone || '',
-      alternateContactName: e.alternateContactName || '',
-      alternateContactPhone: e.alternateContactPhone || '',
-      pickupDateTime: e.pickupDateTime || '',
-      pickupLocation: e.pickupLocation || '',
-      dropLocation: e.dropLocation || '',
-      trainFlightNumber: e.trainFlightNumber || '',
-      customerRequests: e.customerRequests || '',
-      notes: e.notes || '',
-      enquiryQuote: e.enquiryQuote || '',
+      customerPhone: e.customerPhone || '', customerName: e.customerName || '',
+      customerId: e.customerId || '', agentId: e.agentId || '',
+      guestName: e.guestName || '', guestPhone: e.guestPhone || '',
+      alternateContactName: e.alternateContactName || '', alternateContactPhone: e.alternateContactPhone || '',
+      customerRequests: e.customerRequests || '', notes: e.notes || '', enquiryQuote: e.enquiryQuote || '',
     })
     setInlineTrips([])
+    setConvertToBooking(false)
+    setBookingFields(emptyBookingFields())
     setEErrors({})
     setFormError('')
     setEnquiryModal(true)
   }
 
-  // Validate enquiry form
-  const validateEnquiry = () => {
-    const e = {}
-    if (!eForm.agentId) e.agentId = 'Required'
-    // Customer phone required only for direct agents
-    if (isDirectAgent && !eForm.customerPhone.trim()) e.customerPhone = 'Required for this agent type'
-    return e
-  }
-
-  const handleEnquirySubmit = async (ev) => {
-    ev.preventDefault()
-    const errs = validateEnquiry()
-    if (Object.keys(errs).length) { setEErrors(errs); return }
-    setFormError('')
-    try {
-      await saveEnquiry(
-        { ...eForm, isAgentBooking: isAgentBooking ? 'true' : 'false' },
-        inlineTrips
-      )
-    } catch (err) {
-      setFormError(err.message)
+  // Check for unsaved trip editor state via hidden input
+  const getTripEditorState = () => {
+    const el = document.getElementById('trip-editor-state')
+    if (!el) return { partial: false, open: false }
+    return {
+      partial: el.dataset.partial === 'true',
+      open: el.dataset.open === 'true',
     }
   }
 
-  // ─── Table columns ────────────────────────────────────────────────────────────
+  const validateAndSubmitEnquiry = (ev) => {
+    ev.preventDefault()
+    const errs = {}
+    if (!eForm.agentId) errs.agentId = 'Required'
+    if (isDirectAgent && !eForm.customerPhone.trim()) errs.customerPhone = 'Required for this agent type'
+    if (Object.keys(errs).length) { setEErrors(errs); return }
+    setFormError('')
 
+    const tripState = getTripEditorState()
+    const data = { form: eForm, trips: inlineTrips, isBooking: convertToBooking, bFields: bookingFields }
+
+    // Check for unsaved trip data in the editor
+    if (tripState.open && tripState.partial) {
+      setPendingSubmitData(data)
+      setUnsavedTripConfirm(true)
+      return
+    }
+
+    // Check for no trips added
+    if (inlineTrips.length === 0 && !editEnquiry) {
+      setPendingSubmitData(data)
+      setNoTripConfirm(true)
+      return
+    }
+
+    doSaveEnquiry(data)
+  }
+
+  const doSaveEnquiry = ({ form, trips, isBooking, bFields }) => {
+    setNoTripConfirm(false)
+    setUnsavedTripConfirm(false)
+    setPendingSubmitData(null)
+    saveEnquiry(form, trips, isBooking, bFields).catch((err) => setFormError(err.message))
+  }
+
+  // ── Table columns ─────────────────────────────────────────────────────────
   const columns = [
     { key: 'enquiryId', label: 'Enquiry ID' },
     { key: 'bookingId', label: 'Booking ID', render: (e) => e.bookingId || '—' },
@@ -603,17 +545,13 @@ export default function EnquiriesPage() {
     },
     {
       key: 'agent', label: 'Agent',
-      render: (e) => {
-        const agent = agents.find((a) => a.id === e.agentId)
-        return agent ? (
-          <span className="text-sm text-gray-600">{agent.name}</span>
-        ) : '—'
-      },
+      render: (e) => agents.find((a) => a.id === e.agentId)?.name || '—',
     },
     {
       key: 'status', label: 'Status',
       render: (e) => <Badge className={BOOKING_STATUS_COLORS[e.status] || 'bg-gray-100 text-gray-700'}>{e.status}</Badge>,
     },
+    { key: 'amountPending', label: 'Pending', render: (e) => e.amountPending ? formatCurrency(e.amountPending) : '—' },
     { key: 'createdAt', label: 'Created', render: (e) => formatDate(e.createdAt) },
     {
       key: 'actions', label: '',
@@ -626,13 +564,12 @@ export default function EnquiriesPage() {
     },
   ]
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
       <PageHeader
         title="Enquiries & Bookings"
-        subtitle={`${enquiries.length} total records`}
+        subtitle={`${enquiries.filter(e => e.isDeleted !== 'true').length} total records`}
         actions={<Button onClick={openNewEnquiry}>+ New Enquiry</Button>}
       />
       {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg('')} />}
@@ -640,263 +577,279 @@ export default function EnquiriesPage() {
       <Card className="mt-4">
         <CardHeader>
           <Tabs tabs={tabsWithCounts} active={tab} onChange={setTab} />
-          <SearchInput value={search} onChange={setSearch} placeholder="Search by ID, name, phone..." className="max-w-sm" />
+
+          {/* Filter bar */}
+          <div className="flex flex-wrap gap-3 mt-3 items-end">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search ID, name, phone..." className="w-56" />
+
+            <Select
+              options={agentOptions}
+              value={filterAgent}
+              onChange={(e) => setFilterAgent(e.target.value)}
+              placeholder="All agents"
+              className="w-44"
+            />
+
+            <div className="flex items-center gap-1">
+              <label className="text-xs text-gray-500">From</label>
+              <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-xs text-gray-500">To</label>
+              <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div className="flex items-center gap-3 text-sm">
+              <label className="flex items-center gap-1.5 cursor-pointer text-gray-600">
+                <input type="checkbox" className="rounded border-gray-300 text-blue-600" checked={filterBookingsOnly} onChange={(e) => { setFilterBookingsOnly(e.target.checked); if (e.target.checked) setFilterEnquiriesOnly(false) }} />
+                Bookings only
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-gray-600">
+                <input type="checkbox" className="rounded border-gray-300 text-blue-600" checked={filterEnquiriesOnly} onChange={(e) => { setFilterEnquiriesOnly(e.target.checked); if (e.target.checked) setFilterBookingsOnly(false) }} />
+                Enquiries only
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-gray-600">
+                <input type="checkbox" className="rounded border-gray-300 text-orange-500" checked={filterPendingOnly} onChange={(e) => setFilterPendingOnly(e.target.checked)} />
+                Pending payments
+              </label>
+            </div>
+
+            {hasActiveFilters && (
+              <Button size="sm" variant="ghost" onClick={() => {
+                setFilterAgent(''); setFilterDateFrom(''); setFilterDateTo('')
+                setFilterPendingOnly(false); setFilterBookingsOnly(false); setFilterEnquiriesOnly(false)
+              }}>Clear filters</Button>
+            )}
+          </div>
         </CardHeader>
-        <Table
-          columns={columns}
-          data={filtered}
-          loading={eLoading || tLoading}
-          onRowClick={(e) => setDetailEnquiry(e)}
-        />
+
+        <Table columns={columns} data={filtered} loading={eLoading || tLoading} onRowClick={(e) => setDetailEnquiry(e)} />
       </Card>
 
-      {/* ── New / Edit Enquiry Modal ──────────────────────────────────────────── */}
-      <Modal
-        open={enquiryModal}
-        onClose={() => setEnquiryModal(false)}
-        title={editEnquiry ? `Edit Enquiry — ${editEnquiry.enquiryId}` : 'New Enquiry'}
-        size="xl"
-      >
-        <form onSubmit={handleEnquirySubmit} className="space-y-5">
+      {/* ── New / Edit Enquiry Modal ────────────────────────────────────────── */}
+      <Modal open={enquiryModal} onClose={() => setEnquiryModal(false)}
+        title={editEnquiry ? `Edit — ${editEnquiry.enquiryId}` : 'New Enquiry'}
+        size="xl">
+        <form onSubmit={validateAndSubmitEnquiry} className="space-y-5">
           {formError && <Alert type="error" message={formError} />}
 
-          {/* ── Agent ── */}
+          {/* Agent */}
           <SectionTitle>Agent / Source</SectionTitle>
-          <Select
-            label="Agent / Source"
-            required
-            options={agentOptions}
-            value={eForm.agentId}
+          <Select label="Agent / Source" required options={agentOptions} value={eForm.agentId}
             onChange={(e) => setEForm(f => ({ ...f, agentId: e.target.value }))}
-            error={eErrors.agentId}
-            placeholder="Select agent..."
-          />
-
+            error={eErrors.agentId} placeholder="Select agent..." />
           {selectedAgent && (
             <p className="text-xs text-gray-500 -mt-2">
               Type: <span className="font-medium">
                 {selectedAgent.agentType === 'other_business'
-                  ? 'Business / Individual Agent — customer details optional, guest details recommended'
+                  ? 'Business / Individual Agent — customer details optional'
                   : 'Direct — customer phone required'}
               </span>
             </p>
           )}
 
-          {/* ── Customer ── */}
+          {/* Customer */}
           <SectionTitle>
             Customer Details
             {isAgentBooking && <span className="ml-2 text-xs font-normal text-gray-400 normal-case">(optional for agent bookings)</span>}
           </SectionTitle>
-
           <div className="grid grid-cols-2 gap-4">
-            {/* Phone with auto-detect */}
             <div className="relative">
               <Input
                 label={`Customer Phone${isDirectAgent ? ' *' : ''}`}
                 type="tel"
                 value={eForm.customerPhone}
-                onChange={(e) => handlePhoneChange(e.target.value)}
+                onChange={(e) => setEForm(f => ({ ...f, customerPhone: e.target.value, customerId: '' }))}
+                onFocus={() => setPhoneFieldFocused(true)}
+                onBlur={() => setTimeout(() => setPhoneFieldFocused(false), 150)}
                 error={eErrors.customerPhone}
-                placeholder="Start typing to search..."
+                placeholder="Start typing to match..."
                 autoComplete="off"
               />
               <CustomerMatchDropdown
                 phone={eForm.customerPhone}
                 customers={customers}
-                onSelect={handleCustomerSelect}
+                visible={phoneFieldFocused}
+                onSelect={(c) => setEForm(f => ({ ...f, customerId: c.id, customerName: c.name, customerPhone: c.phone }))}
               />
-              {eForm.customerId && (
-                <p className="text-xs text-green-600 mt-1">✓ Linked to existing customer</p>
-              )}
+              {eForm.customerId && <p className="text-xs text-green-600 mt-1">✓ Linked to existing customer</p>}
             </div>
-            <Input
-              label="Customer Name"
-              value={eForm.customerName}
-              onChange={(e) => setEForm(f => ({ ...f, customerName: e.target.value }))}
-            />
+            <Input label="Customer Name" value={eForm.customerName}
+              onChange={(e) => setEForm(f => ({ ...f, customerName: e.target.value }))} />
           </div>
 
-          {/* ── Travelling Guest ── */}
+          {/* Guest */}
           <SectionTitle>Travelling Guest <span className="text-xs font-normal text-gray-400 normal-case">(person actually travelling, if different from customer)</span></SectionTitle>
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Guest Name"
-              value={eForm.guestName}
-              onChange={(e) => setEForm(f => ({ ...f, guestName: e.target.value }))}
-              placeholder="e.g. Mr. Sharma"
-            />
-            <Input
-              label="Guest Phone"
-              type="tel"
-              value={eForm.guestPhone}
-              onChange={(e) => setEForm(f => ({ ...f, guestPhone: e.target.value }))}
+            <Input label="Guest Name" value={eForm.guestName} onChange={(e) => setEForm(f => ({ ...f, guestName: e.target.value }))} />
+            <Input label="Guest Phone" type="tel" value={eForm.guestPhone} onChange={(e) => setEForm(f => ({ ...f, guestPhone: e.target.value }))} />
+            <Input label="Alternate Contact Name" value={eForm.alternateContactName} onChange={(e) => setEForm(f => ({ ...f, alternateContactName: e.target.value }))} />
+            <Input label="Alternate Contact Phone" type="tel" value={eForm.alternateContactPhone} onChange={(e) => setEForm(f => ({ ...f, alternateContactPhone: e.target.value }))} />
+          </div>
+
+          {/* Trips */}
+          <div className="pt-1">
+            <InlineTripEditor
+              trips={inlineTrips}
+              onAdd={(trip) => setInlineTrips(t => [...t, trip])}
+              onRemove={(i) => setInlineTrips(t => t.filter((_, idx) => idx !== i))}
+              vehicles={vehicles}
+              drivers={drivers}
             />
           </div>
 
-          {/* ── Alternate Contact ── */}
-          <SectionTitle>Alternate Contact <span className="text-xs font-normal text-gray-400 normal-case">(optional second contact)</span></SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Alternate Contact Name"
-              value={eForm.alternateContactName}
-              onChange={(e) => setEForm(f => ({ ...f, alternateContactName: e.target.value }))}
-            />
-            <Input
-              label="Alternate Contact Phone"
-              type="tel"
-              value={eForm.alternateContactPhone}
-              onChange={(e) => setEForm(f => ({ ...f, alternateContactPhone: e.target.value }))}
-            />
-          </div>
-
-          {/* ── Trip Details ── */}
-          <SectionTitle>Trip Details <span className="text-xs font-normal text-gray-400 normal-case">(optional at enquiry stage)</span></SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Pickup Date & Time"
-              type="datetime-local"
-              value={eForm.pickupDateTime}
-              onChange={(e) => setEForm(f => ({ ...f, pickupDateTime: e.target.value }))}
-            />
-            <Input
-              label="Pickup Location"
-              value={eForm.pickupLocation}
-              onChange={(e) => setEForm(f => ({ ...f, pickupLocation: e.target.value }))}
-            />
-            <Input
-              label="Drop Location"
-              value={eForm.dropLocation}
-              onChange={(e) => setEForm(f => ({ ...f, dropLocation: e.target.value }))}
-            />
-            <Input
-              label="Train / Flight No."
-              value={eForm.trainFlightNumber}
-              onChange={(e) => setEForm(f => ({ ...f, trainFlightNumber: e.target.value }))}
-            />
-          </div>
-
-          {/* ── Inline Trips ── */}
-          {!editEnquiry && (
-            <div className="pt-1">
-              <InlineTripEditor
-                trips={inlineTrips}
-                onAdd={(trip) => setInlineTrips(t => [...t, trip])}
-                onRemove={(i) => setInlineTrips(t => t.filter((_, idx) => idx !== i))}
-                vehicles={vehicles}
-                drivers={drivers}
-              />
-            </div>
-          )}
-
-          {/* ── Notes & Quote ── */}
+          {/* Notes */}
           <SectionTitle>Notes & Quote</SectionTitle>
           <div className="grid grid-cols-1 gap-4">
-            <Textarea
-              label="Customer Requests"
-              rows={2}
-              value={eForm.customerRequests}
-              onChange={(e) => setEForm(f => ({ ...f, customerRequests: e.target.value }))}
+            <Textarea label="Customer Requests" rows={2} value={eForm.customerRequests}
+              onChange={(e) => setEForm(f => ({ ...f, customerRequests: e.target.value }))} />
+            <Textarea label="Enquiry Quote / Message" rows={3} value={eForm.enquiryQuote}
+              onChange={(e) => setEForm(f => ({ ...f, enquiryQuote: e.target.value }))} />
+            <Textarea label="Internal Notes" rows={2} value={eForm.notes}
+              onChange={(e) => setEForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+
+          {/* Convert to booking checkbox */}
+          <div className="border border-blue-100 rounded-xl bg-blue-50/40 p-4">
+            <Checkbox
+              label="Convert to Booking directly"
+              checked={convertToBooking}
+              onChange={(e) => setConvertToBooking(e.target.checked)}
             />
-            <Textarea
-              label="Enquiry Quote / Message"
-              rows={3}
-              value={eForm.enquiryQuote}
-              onChange={(e) => setEForm(f => ({ ...f, enquiryQuote: e.target.value }))}
-            />
-            <Textarea
-              label="Internal Notes"
-              rows={2}
-              value={eForm.notes}
-              onChange={(e) => setEForm(f => ({ ...f, notes: e.target.value }))}
-            />
+            {convertToBooking && (
+              <div className="mt-4 space-y-4">
+                <p className="text-xs text-blue-600">Fill booking details now (optional — can be done later via Edit)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Pickup Date & Time" type="datetime-local" value={bookingFields.pickupDateTime}
+                    onChange={(e) => setBookingFields(f => ({ ...f, pickupDateTime: e.target.value }))} />
+                  <Input label="Pickup Location" value={bookingFields.pickupLocation}
+                    onChange={(e) => setBookingFields(f => ({ ...f, pickupLocation: e.target.value }))} />
+                  <Input label="Drop Location" value={bookingFields.dropLocation}
+                    onChange={(e) => setBookingFields(f => ({ ...f, dropLocation: e.target.value }))} />
+                  <Input label="Train / Flight No." value={bookingFields.trainFlightNumber}
+                    onChange={(e) => setBookingFields(f => ({ ...f, trainFlightNumber: e.target.value }))} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Total Amount (₹)" type="number" value={bookingFields.totalAmount}
+                    onChange={(e) => setBookingFields(f => ({ ...f, totalAmount: e.target.value }))} />
+                  <Input label="Amount Received (₹)" type="number" value={bookingFields.amountReceived}
+                    onChange={(e) => setBookingFields(f => ({ ...f, amountReceived: e.target.value }))} />
+                  <Input label="Amount Pending (₹)" type="number" value={bookingFields.amountPending}
+                    onChange={(e) => setBookingFields(f => ({ ...f, amountPending: e.target.value }))} />
+                </div>
+                <Textarea label="Booking Quote" rows={3} value={bookingFields.bookingQuote}
+                  onChange={(e) => setBookingFields(f => ({ ...f, bookingQuote: e.target.value }))} />
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setEnquiryModal(false)}>Cancel</Button>
-            <Button type="submit" loading={savingEnquiry}>
-              {editEnquiry ? 'Update Enquiry' : `Create Enquiry${inlineTrips.length > 0 ? ` + ${inlineTrips.length} Trip${inlineTrips.length > 1 ? 's' : ''}` : ''}`}
+            <Button type="submit" loading={savingEnquiry} variant={convertToBooking ? 'success' : 'primary'}>
+              {editEnquiry
+                ? 'Update Enquiry'
+                : convertToBooking
+                  ? `Confirm Booking${inlineTrips.length > 0 ? ` + ${inlineTrips.length} Trip${inlineTrips.length > 1 ? 's' : ''}` : ''}`
+                  : `Create Enquiry${inlineTrips.length > 0 ? ` + ${inlineTrips.length} Trip${inlineTrips.length > 1 ? 's' : ''}` : ''}`
+              }
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* ── Detail / Booking Modal ────────────────────────────────────────────── */}
-      <Modal
-        open={!!detailEnquiry}
-        onClose={() => setDetailEnquiry(null)}
-        title={detailEnquiry?.bookingId || detailEnquiry?.enquiryId || 'Details'}
-        size="2xl"
-      >
-        {detailEnquiry && (() => {
-          const enquiryTrips = getEnquiryTrips(detailEnquiry.enquiryId)
-          const payments = getEnquiryPayments(detailEnquiry.bookingId)
-          const isConfirmed = !!detailEnquiry.bookingId
+      {/* ── No trip confirmation ──────────────────────────────────────────────── */}
+      <ConfirmDialog
+        open={noTripConfirm}
+        onConfirm={() => doSaveEnquiry(pendingSubmitData)}
+        onCancel={() => { setNoTripConfirm(false); setPendingSubmitData(null) }}
+        title="No trips added"
+        message="You haven't added any trips to this enquiry. Proceed without trips?"
+        confirmLabel="Yes, proceed"
+        variant="primary"
+      />
+
+      {/* ── Unsaved trip confirmation ─────────────────────────────────────────── */}
+      <ConfirmDialog
+        open={unsavedTripConfirm}
+        onConfirm={() => doSaveEnquiry(pendingSubmitData)}
+        onCancel={() => { setUnsavedTripConfirm(false); setPendingSubmitData(null) }}
+        title="Unsaved trip data"
+        message="You have trip details entered but not added as a trip. Proceed without saving those trip details?"
+        confirmLabel="Yes, discard trip data"
+        variant="danger"
+      />
+
+      {/* ── Detail Modal ──────────────────────────────────────────────────────── */}
+      <Modal open={!!detailEnquiry} onClose={() => setDetailEnquiry(null)}
+        title={liveDetailEnquiry?.bookingId || liveDetailEnquiry?.enquiryId || 'Details'}
+        size="2xl">
+        {liveDetailEnquiry && (() => {
+          const enquiryTrips = getEnquiryTrips(liveDetailEnquiry.enquiryId)
+          const payments = getEnquiryPayments(liveDetailEnquiry.bookingId)
+          const isConfirmed = !!liveDetailEnquiry.bookingId
 
           return (
             <div>
-              {/* Status + Quick Actions */}
+              {/* Status + Actions */}
               <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <Badge className={BOOKING_STATUS_COLORS[detailEnquiry.status] || ''}>{detailEnquiry.status}</Badge>
-                <Button size="sm" variant="secondary" onClick={() => {
-                  setStatusModal({ enquiryId: detailEnquiry.enquiryId, currentStatus: detailEnquiry.status })
-                }}>Change Status</Button>
-                {!isConfirmed && (
-                  <Button size="sm" variant="primary" onClick={() => {
-                    setBForm({
-                      ...emptyBookingForm(),
-                      customerName: detailEnquiry.customerName || '',
-                      customerPhone: detailEnquiry.customerPhone || '',
-                      customerId: detailEnquiry.customerId || '',
-                      agentId: detailEnquiry.agentId || '',
-                      guestName: detailEnquiry.guestName || '',
-                      guestPhone: detailEnquiry.guestPhone || '',
-                      alternateContactName: detailEnquiry.alternateContactName || '',
-                      alternateContactPhone: detailEnquiry.alternateContactPhone || '',
-                      pickupDateTime: detailEnquiry.pickupDateTime || '',
-                      pickupLocation: detailEnquiry.pickupLocation || '',
-                      dropLocation: detailEnquiry.dropLocation || '',
-                      trainFlightNumber: detailEnquiry.trainFlightNumber || '',
-                      customerRequests: detailEnquiry.customerRequests || '',
-                      notes: detailEnquiry.notes || '',
-                      enquiryQuote: detailEnquiry.enquiryQuote || '',
-                    })
-                    setConfirmModal(true)
-                  }}>Confirm as Booking</Button>
-                )}
+                <Badge className={BOOKING_STATUS_COLORS[liveDetailEnquiry.status] || 'bg-gray-100 text-gray-700'}>
+                  {liveDetailEnquiry.status}
+                </Badge>
+                {/* Status picker inline */}
+                <div className="flex gap-1 flex-wrap">
+                  {BOOKING_STATUS_OPTIONS.map((s) => (
+                    <button key={s} type="button"
+                      onClick={() => doStatusUpdate(s)}
+                      disabled={updatingStatus || liveDetailEnquiry.status === s}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors disabled:opacity-40
+                        ${liveDetailEnquiry.status === s
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => { setDetailEnquiry(null); openEditEnquiry(liveDetailEnquiry) }}>
+                  Edit
+                </Button>
               </div>
 
-              {/* Booking Info */}
-              <SectionTitle>Booking Info</SectionTitle>
+              {/* Info */}
+              <SectionTitle>Details</SectionTitle>
               <div className="grid grid-cols-2 gap-x-4">
-                <InfoRow label="Enquiry ID" value={detailEnquiry.enquiryId} />
-                <InfoRow label="Booking ID" value={detailEnquiry.bookingId || '—'} />
-                <InfoRow label="Customer" value={detailEnquiry.customerName} />
-                <InfoRow label="Customer Phone" value={detailEnquiry.customerPhone} />
-                {detailEnquiry.guestName && <InfoRow label="Travelling Guest" value={`${detailEnquiry.guestName}${detailEnquiry.guestPhone ? ` · ${detailEnquiry.guestPhone}` : ''}`} />}
-                {detailEnquiry.alternateContactName && <InfoRow label="Alternate Contact" value={`${detailEnquiry.alternateContactName}${detailEnquiry.alternateContactPhone ? ` · ${detailEnquiry.alternateContactPhone}` : ''}`} />}
-                <InfoRow label="Pickup" value={formatDateTime(detailEnquiry.pickupDateTime)} />
-                <InfoRow label="Pickup Location" value={detailEnquiry.pickupLocation} />
-                <InfoRow label="Drop Location" value={detailEnquiry.dropLocation} />
-                <InfoRow label="Train/Flight" value={detailEnquiry.trainFlightNumber} />
+                <InfoRow label="Enquiry ID" value={liveDetailEnquiry.enquiryId} />
+                <InfoRow label="Booking ID" value={liveDetailEnquiry.bookingId || '—'} />
+                <InfoRow label="Customer" value={liveDetailEnquiry.customerName} />
+                <InfoRow label="Customer Phone" value={liveDetailEnquiry.customerPhone} />
+                {liveDetailEnquiry.guestName && <InfoRow label="Guest" value={`${liveDetailEnquiry.guestName}${liveDetailEnquiry.guestPhone ? ` · ${liveDetailEnquiry.guestPhone}` : ''}`} />}
+                {liveDetailEnquiry.alternateContactName && <InfoRow label="Alt. Contact" value={`${liveDetailEnquiry.alternateContactName}${liveDetailEnquiry.alternateContactPhone ? ` · ${liveDetailEnquiry.alternateContactPhone}` : ''}`} />}
+                <InfoRow label="Agent" value={agents.find(a => a.id === liveDetailEnquiry.agentId)?.name || '—'} />
+                <InfoRow label="Pickup" value={formatDateTime(liveDetailEnquiry.pickupDateTime)} />
+                <InfoRow label="Pickup Location" value={liveDetailEnquiry.pickupLocation} />
+                <InfoRow label="Drop Location" value={liveDetailEnquiry.dropLocation} />
+                <InfoRow label="Train/Flight" value={liveDetailEnquiry.trainFlightNumber} />
               </div>
-              {detailEnquiry.notes && <div className="mt-2 text-sm text-gray-600 bg-gray-50 rounded p-3">{detailEnquiry.notes}</div>}
+              {liveDetailEnquiry.notes && <div className="mt-2 text-sm text-gray-600 bg-gray-50 rounded p-3">{liveDetailEnquiry.notes}</div>}
+              {liveDetailEnquiry.customerRequests && <div className="mt-2 text-sm text-gray-600 bg-yellow-50 rounded p-3">Requests: {liveDetailEnquiry.customerRequests}</div>}
 
-              {/* Financial Summary */}
-              {isConfirmed && (
+              {/* Financials — always show if any value present */}
+              {(liveDetailEnquiry.totalAmount || liveDetailEnquiry.amountReceived || liveDetailEnquiry.amountPending) && (
                 <>
                   <SectionTitle>Financials</SectionTitle>
                   <div className="grid grid-cols-3 gap-4 mb-2">
                     <div className="bg-blue-50 rounded-lg p-3">
                       <p className="text-xs text-blue-600">Total</p>
-                      <p className="text-lg font-bold text-blue-900">{formatCurrency(detailEnquiry.totalAmount)}</p>
+                      <p className="text-lg font-bold text-blue-900">{formatCurrency(liveDetailEnquiry.totalAmount)}</p>
                     </div>
                     <div className="bg-green-50 rounded-lg p-3">
                       <p className="text-xs text-green-600">Received</p>
-                      <p className="text-lg font-bold text-green-900">{formatCurrency(detailEnquiry.amountReceived)}</p>
+                      <p className="text-lg font-bold text-green-900">{formatCurrency(liveDetailEnquiry.amountReceived)}</p>
                     </div>
                     <div className="bg-yellow-50 rounded-lg p-3">
                       <p className="text-xs text-yellow-600">Pending</p>
-                      <p className="text-lg font-bold text-yellow-900">{formatCurrency(detailEnquiry.amountPending)}</p>
+                      <p className="text-lg font-bold text-yellow-900">{formatCurrency(liveDetailEnquiry.amountPending)}</p>
                     </div>
                   </div>
                 </>
@@ -907,7 +860,7 @@ export default function EnquiriesPage() {
                 <SectionTitle>Trips ({enquiryTrips.length})</SectionTitle>
                 <Button size="sm" variant="secondary" onClick={() => {
                   setTripForm(emptyTripForm())
-                  setTripModal({ enquiryId: detailEnquiry.enquiryId, bookingId: detailEnquiry.bookingId, editTrip: null })
+                  setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: null })
                 }}>+ Add Trip</Button>
               </div>
               {enquiryTrips.length === 0 ? (
@@ -926,18 +879,17 @@ export default function EnquiriesPage() {
                         <div className="flex gap-2">
                           <Button size="sm" variant="ghost" onClick={() => {
                             setTripForm({ ...emptyTripForm(), ...trip })
-                            setTripModal({ enquiryId: detailEnquiry.enquiryId, bookingId: detailEnquiry.bookingId, editTrip: trip })
+                            setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: trip })
                           }}>Edit</Button>
-                          <Button size="sm" variant="ghost" onClick={async () => {
-                            await softDeleteTrip(trip.id, user.username)
-                            await refetchTrips()
-                          }} className="text-red-500">Del</Button>
+                          <Button size="sm" variant="ghost" onClick={async () => { await softDeleteTrip(trip.id, user.username); await refetchTrips() }} className="text-red-500">Del</Button>
                         </div>
                       </div>
                       <div className="text-gray-500 mt-1">
+                        {trip.pickupDateTime && <span>{formatDateTime(trip.pickupDateTime)} · </span>}
                         {formatDate(trip.startDate)} → {formatDate(trip.endDate)}
                         {trip.allocatedDriverName && <span> · Driver: {trip.allocatedDriverName}</span>}
-                        {trip.isVendorTrip === 'true' && <span className="ml-2 text-orange-600">(Vendor: {trip.vendorName})</span>}
+                        {trip.allocatedVehicleNumber && <span> · {trip.allocatedVehicleNumber}</span>}
+                        {(trip.isVendorTrip === 'true' || trip.isVendorTrip === true) && <span className="ml-2 text-orange-600">(Vendor: {trip.vendorName})</span>}
                       </div>
                     </div>
                   ))}
@@ -951,7 +903,7 @@ export default function EnquiriesPage() {
                     <SectionTitle>Payments ({payments.length})</SectionTitle>
                     <Button size="sm" variant="secondary" onClick={() => {
                       setPayForm(emptyPaymentForm())
-                      setPaymentModal({ bookingId: detailEnquiry.bookingId, tripId: '' })
+                      setPaymentModal({ bookingId: liveDetailEnquiry.bookingId })
                     }}>+ Add Payment</Button>
                   </div>
                   {payments.length === 0 ? (
@@ -965,16 +917,14 @@ export default function EnquiriesPage() {
                             <span className="text-gray-400 mx-2">·</span>
                             <span className="text-gray-600">{p.mode}</span>
                             <span className="text-gray-400 ml-2">{formatDate(p.paymentDate)}</span>
+                            {p.tripId && <span className="text-xs text-blue-500 ml-2">· Trip tagged</span>}
+                            {p.notes && <span className="text-gray-400 ml-2">· {p.notes}</span>}
                           </div>
                           <div className="flex items-center gap-2">
-                            {p.isVerified === 'true' ? (
-                              <Badge className="bg-green-100 text-green-700">Verified</Badge>
-                            ) : (
-                              isAdmin && <Button size="sm" variant="ghost" onClick={async () => {
-                                await verifyPayment(p.id, user.username)
-                                await refetchPayments()
-                              }} className="text-green-600">Verify</Button>
-                            )}
+                            {p.isVerified === 'true'
+                              ? <Badge className="bg-green-100 text-green-700">Verified</Badge>
+                              : isAdmin && <Button size="sm" variant="ghost" onClick={async () => { await verifyPayment(p.id, user.username); await refetchPayments() }} className="text-green-600">Verify</Button>
+                            }
                           </div>
                         </div>
                       ))}
@@ -982,77 +932,18 @@ export default function EnquiriesPage() {
                   )}
                 </>
               )}
+
+              {/* Expenses */}
+              <div className="flex items-center justify-between mt-4 mb-2">
+                <SectionTitle>Expenses</SectionTitle>
+                <Button size="sm" variant="secondary" onClick={() => {
+                  setExpForm(emptyExpenseForm())
+                  setExpenseModal({ bookingId: liveDetailEnquiry.bookingId, enquiryId: liveDetailEnquiry.enquiryId })
+                }}>+ Add Expense</Button>
+              </div>
             </div>
           )
         })()}
-      </Modal>
-
-      {/* ── Confirm Booking Modal ─────────────────────────────────────────────── */}
-      <Modal open={confirmModal} onClose={() => setConfirmModal(false)} title="Confirm Booking" size="xl">
-        <form onSubmit={async (e) => {
-          e.preventDefault()
-          setFormError('')
-          try { await doConfirm(bForm) } catch (err) { setFormError(err.message) }
-        }} className="space-y-4">
-          {formError && <Alert type="error" message={formError} />}
-
-          <SectionTitle>Customer Details</SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="relative">
-              <Input
-                label={isDirectAgentBooking ? 'Customer Phone *' : 'Customer Phone'}
-                type="tel"
-                value={bForm.customerPhone || ''}
-                onChange={(e) => setBForm(f => ({ ...f, customerPhone: e.target.value, customerId: '' }))}
-                autoComplete="off"
-              />
-              <CustomerMatchDropdown
-                phone={bForm.customerPhone || ''}
-                customers={customers}
-                onSelect={(c) => setBForm(f => ({ ...f, customerId: c.id, customerName: c.name, customerPhone: c.phone }))}
-              />
-            </div>
-            <Input
-              label={isDirectAgentBooking ? 'Customer Name *' : 'Customer Name'}
-              required={isDirectAgentBooking}
-              value={bForm.customerName}
-              onChange={(e) => setBForm(f => ({ ...f, customerName: e.target.value }))}
-            />
-          </div>
-
-          <SectionTitle>Travelling Guest <span className="text-xs font-normal text-gray-400 normal-case">(person actually travelling)</span></SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Guest Name" value={bForm.guestName} onChange={(e) => setBForm(f => ({ ...f, guestName: e.target.value }))} />
-            <Input label="Guest Phone" type="tel" value={bForm.guestPhone} onChange={(e) => setBForm(f => ({ ...f, guestPhone: e.target.value }))} />
-            <Input label="Alternate Contact Name" value={bForm.alternateContactName} onChange={(e) => setBForm(f => ({ ...f, alternateContactName: e.target.value }))} />
-            <Input label="Alternate Contact Phone" type="tel" value={bForm.alternateContactPhone} onChange={(e) => setBForm(f => ({ ...f, alternateContactPhone: e.target.value }))} />
-          </div>
-
-          <SectionTitle>Trip Details</SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Pickup Date & Time" type="datetime-local" value={bForm.pickupDateTime} onChange={(e) => setBForm(f => ({ ...f, pickupDateTime: e.target.value }))} />
-            <Input label="Pickup Location" value={bForm.pickupLocation} onChange={(e) => setBForm(f => ({ ...f, pickupLocation: e.target.value }))} />
-            <Input label="Drop Location" value={bForm.dropLocation} onChange={(e) => setBForm(f => ({ ...f, dropLocation: e.target.value }))} />
-            <Input label="Train / Flight No." value={bForm.trainFlightNumber} onChange={(e) => setBForm(f => ({ ...f, trainFlightNumber: e.target.value }))} />
-          </div>
-
-          <SectionTitle>Financials</SectionTitle>
-          <div className="grid grid-cols-3 gap-4">
-            <Input label="Total Amount (₹)" type="number" value={bForm.totalAmount} onChange={(e) => setBForm(f => ({ ...f, totalAmount: e.target.value }))} />
-            <Input label="Amount Received (₹)" type="number" value={bForm.amountReceived} onChange={(e) => setBForm(f => ({ ...f, amountReceived: e.target.value }))} />
-            <Input label="Amount Pending (₹)" type="number" value={bForm.amountPending} onChange={(e) => setBForm(f => ({ ...f, amountPending: e.target.value }))} />
-          </div>
-
-          <SectionTitle>Notes</SectionTitle>
-          <Textarea label="Customer Requests" value={bForm.customerRequests} onChange={(e) => setBForm(f => ({ ...f, customerRequests: e.target.value }))} />
-          <Textarea label="Booking Quote" rows={4} value={bForm.bookingQuote} onChange={(e) => setBForm(f => ({ ...f, bookingQuote: e.target.value }))} />
-          <Textarea label="Internal Notes" value={bForm.notes} onChange={(e) => setBForm(f => ({ ...f, notes: e.target.value }))} />
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setConfirmModal(false)}>Cancel</Button>
-            <Button type="submit" loading={confirming} variant="success">Confirm Booking</Button>
-          </div>
-        </form>
       </Modal>
 
       {/* ── Trip Modal ────────────────────────────────────────────────────────── */}
@@ -1065,14 +956,11 @@ export default function EnquiriesPage() {
         }} className="space-y-4">
           {formError && <Alert type="error" message={formError} />}
           <div className="grid grid-cols-2 gap-4">
-            <Select label="Trip Type" required options={TRIP_TYPE_OPTIONS} value={tripForm.tripType}
-              onChange={(e) => setTripForm(f => ({ ...f, tripType: e.target.value }))} />
+            <Select label="Trip Type" required options={TRIP_TYPE_OPTIONS} value={tripForm.tripType} onChange={(e) => setTripForm(f => ({ ...f, tripType: e.target.value }))} />
             {tripForm.tripType === 'Delhi/NCR Local' && (
-              <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={tripForm.localSubType}
-                onChange={(e) => setTripForm(f => ({ ...f, localSubType: e.target.value }))} />
+              <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={tripForm.localSubType} onChange={(e) => setTripForm(f => ({ ...f, localSubType: e.target.value }))} />
             )}
-            <Select label="Vehicle Type" required options={VEHICLE_TYPE_OPTIONS} value={tripForm.vehicleType}
-              onChange={(e) => setTripForm(f => ({ ...f, vehicleType: e.target.value }))} />
+            <Select label="Vehicle Type" required options={VEHICLE_TYPE_OPTIONS} value={tripForm.vehicleType} onChange={(e) => setTripForm(f => ({ ...f, vehicleType: e.target.value }))} />
             <Input label="Start Date" type="date" value={tripForm.startDate} onChange={(e) => setTripForm(f => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" value={tripForm.endDate} onChange={(e) => setTripForm(f => ({ ...f, endDate: e.target.value }))} />
             <Input label="Travel Plan" value={tripForm.travelPlan} onChange={(e) => setTripForm(f => ({ ...f, travelPlan: e.target.value }))} />
@@ -1081,10 +969,8 @@ export default function EnquiriesPage() {
             <Input label="Drop Location" value={tripForm.dropLocation} onChange={(e) => setTripForm(f => ({ ...f, dropLocation: e.target.value }))} />
             <Input label="Train / Flight No." value={tripForm.trainFlightNumber} onChange={(e) => setTripForm(f => ({ ...f, trainFlightNumber: e.target.value }))} />
           </div>
-
           <SectionTitle>Vendor (if applicable)</SectionTitle>
-          <Checkbox label="Vendor Trip" checked={tripForm.isVendorTrip === true || tripForm.isVendorTrip === 'true'}
-            onChange={(e) => setTripForm(f => ({ ...f, isVendorTrip: e.target.checked }))} />
+          <Checkbox label="Vendor Trip" checked={tripForm.isVendorTrip === true || tripForm.isVendorTrip === 'true'} onChange={(e) => setTripForm(f => ({ ...f, isVendorTrip: e.target.checked }))} />
           {(tripForm.isVendorTrip === true || tripForm.isVendorTrip === 'true') && (
             <div className="grid grid-cols-3 gap-4">
               <Input label="Vendor Name" value={tripForm.vendorName} onChange={(e) => setTripForm(f => ({ ...f, vendorName: e.target.value }))} />
@@ -1092,27 +978,17 @@ export default function EnquiriesPage() {
               <Input label="Our Commission" value={tripForm.vendorCommission} onChange={(e) => setTripForm(f => ({ ...f, vendorCommission: e.target.value }))} />
             </div>
           )}
-
           <SectionTitle>Vehicle Allocation</SectionTitle>
           <div className="grid grid-cols-2 gap-4">
-            <Select label="From Fleet" options={vehicleOptions} value={tripForm.allocatedVehicleId} onChange={(e) => handleVehicleSelect(e.target.value)} placeholder="Select fleet vehicle..." />
+            <Select label="From Fleet" options={vehicleOptions} value={tripForm.allocatedVehicleId} onChange={(e) => handleVehicleSelect(e.target.value, setTripForm)} placeholder="Select fleet vehicle..." />
             <Input label="Or Manual: Vehicle No." value={tripForm.allocatedVehicleNumber} onChange={(e) => setTripForm(f => ({ ...f, allocatedVehicleNumber: e.target.value }))} />
           </div>
-
           <SectionTitle>Driver Allocation</SectionTitle>
           <div className="grid grid-cols-2 gap-4">
-            <Select label="From Driver List" options={driverOptions} value={tripForm.allocatedDriverId} onChange={(e) => handleDriverSelect(e.target.value)} placeholder="Select driver..." />
+            <Select label="From Driver List" options={driverOptions} value={tripForm.allocatedDriverId} onChange={(e) => handleDriverSelect(e.target.value, setTripForm)} placeholder="Select driver..." />
             <Input label="Or Manual: Driver Name" value={tripForm.allocatedDriverName} onChange={(e) => setTripForm(f => ({ ...f, allocatedDriverName: e.target.value }))} />
             <Input label="Driver Phone" value={tripForm.allocatedDriverPhone} onChange={(e) => setTripForm(f => ({ ...f, allocatedDriverPhone: e.target.value }))} />
           </div>
-
-          <SectionTitle>Trip Financials</SectionTitle>
-          <div className="grid grid-cols-3 gap-4">
-            <Input label="Total Amount (₹)" type="number" value={tripForm.totalAmount} onChange={(e) => setTripForm(f => ({ ...f, totalAmount: e.target.value }))} />
-            <Input label="Amount Received (₹)" type="number" value={tripForm.amountReceived} onChange={(e) => setTripForm(f => ({ ...f, amountReceived: e.target.value }))} />
-            <Input label="Amount Pending (₹)" type="number" value={tripForm.amountPending} onChange={(e) => setTripForm(f => ({ ...f, amountPending: e.target.value }))} />
-          </div>
-
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setTripModal(null)}>Cancel</Button>
             <Button type="submit" loading={savingTrip}>{tripModal?.editTrip ? 'Update Trip' : 'Add Trip'}</Button>
@@ -1120,7 +996,7 @@ export default function EnquiriesPage() {
         </form>
       </Modal>
 
-      {/* ── Payment Modal ──────────────────────────────────────────────────────── */}
+      {/* ── Payment Modal ─────────────────────────────────────────────────────── */}
       <Modal open={!!paymentModal} onClose={() => setPaymentModal(null)} title="Record Payment" size="md">
         <form onSubmit={async (e) => {
           e.preventDefault()
@@ -1134,6 +1010,20 @@ export default function EnquiriesPage() {
             <Input label="Received By" required value={payForm.receivedBy} onChange={(e) => setPayForm(f => ({ ...f, receivedBy: e.target.value }))} />
             <Input label="Payment Date" type="date" required value={payForm.paymentDate} onChange={(e) => setPayForm(f => ({ ...f, paymentDate: e.target.value }))} />
           </div>
+          {/* Tag to trip */}
+          {paymentModal && (() => {
+            const bookingTrips = trips.filter(t => t.bookingId === paymentModal.bookingId || t.enquiryId === paymentModal.bookingId)
+            if (bookingTrips.length <= 1) return null
+            return (
+              <Select
+                label="Tag to Trip (optional)"
+                options={bookingTrips.map(t => ({ value: t.id, label: `${t.vehicleType} · ${t.tripType} · ${formatDate(t.startDate)}` }))}
+                value={payForm.tripId}
+                onChange={(e) => setPayForm(f => ({ ...f, tripId: e.target.value }))}
+                placeholder="Not tagged to a specific trip"
+              />
+            )
+          })()}
           <Input label="Notes" value={payForm.notes} onChange={(e) => setPayForm(f => ({ ...f, notes: e.target.value }))} />
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setPaymentModal(null)}>Cancel</Button>
@@ -1142,26 +1032,77 @@ export default function EnquiriesPage() {
         </form>
       </Modal>
 
-      {/* ── Status Modal ───────────────────────────────────────────────────────── */}
-      <Modal open={!!statusModal} onClose={() => setStatusModal(null)} title="Change Status" size="sm">
-        <div className="space-y-2">
-          {BOOKING_STATUS_OPTIONS.map((s) => (
-            <button key={s} onClick={() => doStatusUpdate(s)}
-              className={`w-full text-left px-4 py-3 rounded-lg border text-sm font-medium transition-colors
-                ${statusModal?.currentStatus === s ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
-              <Badge className={BOOKING_STATUS_COLORS[s] || ''}>{s}</Badge>
-            </button>
-          ))}
-        </div>
+      {/* ── Expense Modal ──────────────────────────────────────────────────────── */}
+      <Modal open={!!expenseModal} onClose={() => setExpenseModal(null)} title="Add Expense" size="lg">
+        <form onSubmit={async (e) => {
+          e.preventDefault()
+          setFormError('')
+          try { await saveExpense(expForm) } catch (err) { setFormError(err.message) }
+        }} className="space-y-4">
+          {formError && <Alert type="error" message={formError} />}
+
+          <Select
+            label="Expense Type"
+            required
+            options={[
+              { value: 'fuel', label: 'Fuel' },
+              { value: 'toll', label: 'Toll' },
+              { value: 'parking', label: 'Parking' },
+              { value: 'allowance', label: 'Driver Allowance' },
+              { value: 'stateTax', label: 'State Tax' },
+            ]}
+            value={expForm.type}
+            onChange={(e) => setExpForm(f => ({ ...f, type: e.target.value }))}
+          />
+
+          {expForm.type === 'fuel' && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Date" required type="date" value={expForm.date} onChange={(e) => setExpForm(f => ({ ...f, date: e.target.value }))} />
+              <Select label="Vehicle" required options={vehicleOptions} value={expForm.vehicleId} onChange={(e) => setExpForm(f => ({ ...f, vehicleId: e.target.value }))} placeholder="Select vehicle..." />
+              <Select label="Driver" required options={driverOptions} value={expForm.driverId} onChange={(e) => setExpForm(f => ({ ...f, driverId: e.target.value }))} placeholder="Select driver..." />
+              <Input label="Amount (₹)" required type="number" value={expForm.amount} onChange={(e) => setExpForm(f => ({ ...f, amount: e.target.value }))} />
+              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          )}
+          {(expForm.type === 'toll' || expForm.type === 'parking') && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Total Amount (₹)" required type="number" value={expForm.totalAmount} onChange={(e) => setExpForm(f => ({ ...f, totalAmount: e.target.value }))} />
+              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          )}
+          {expForm.type === 'allowance' && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Amount Per Day (₹)" required type="number" value={expForm.amountPerDay} onChange={(e) => setExpForm(f => ({ ...f, amountPerDay: e.target.value }))} />
+              <Input label="Number of Days" required type="number" value={expForm.numberOfDays} onChange={(e) => setExpForm(f => ({ ...f, numberOfDays: e.target.value }))} />
+              <Input label="Total Amount (₹)" type="number" value={expForm.totalAmount} onChange={(e) => setExpForm(f => ({ ...f, totalAmount: e.target.value }))} />
+              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          )}
+          {expForm.type === 'stateTax' && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="State Name" required value={expForm.stateName} onChange={(e) => setExpForm(f => ({ ...f, stateName: e.target.value }))} />
+              <Input label="Date" required type="date" value={expForm.date} onChange={(e) => setExpForm(f => ({ ...f, date: e.target.value }))} />
+              <Input label="Amount (₹)" required type="number" value={expForm.amount} onChange={(e) => setExpForm(f => ({ ...f, amount: e.target.value }))} />
+              <Input label="Notes" value={expForm.notes} onChange={(e) => setExpForm(f => ({ ...f, notes: e.target.value }))} />
+              <Checkbox label="AITP Evaluation Only (not actually paid)" checked={!!expForm.isAitpEvaluation}
+                onChange={(e) => setExpForm(f => ({ ...f, isAitpEvaluation: e.target.checked }))} className="col-span-2" />
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setExpenseModal(null)}>Cancel</Button>
+            <Button type="submit" loading={savingExpense}>Record Expense</Button>
+          </div>
+        </form>
       </Modal>
 
-      {/* ── Delete Confirm ─────────────────────────────────────────────────────── */}
+      {/* ── Delete confirm ────────────────────────────────────────────────────── */}
       <ConfirmDialog
         open={!!deleteTarget}
         onConfirm={doDelete}
         onCancel={() => setDeleteTarget(null)}
         title="Delete Enquiry"
-        message={`Delete enquiry "${deleteTarget?.enquiryId}"? This action uses soft delete.`}
+        message={`Delete enquiry "${deleteTarget?.enquiryId}"? This uses soft delete — record will appear in the Deleted tab.`}
       />
     </div>
   )
