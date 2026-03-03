@@ -439,9 +439,10 @@ export default function EnquiriesPage() {
       setExpSavedCount((n) => n + 1)
 
       if (MULTI_ADD_EXP.has(expenseTab)) {
-        // Stay open, preserve vehicle/driver
+        // Stay open — preserve tripId so vehicle+driver stay auto-filled
         setExpForm((prev) => ({
           date: new Date().toISOString().split('T')[0],
+          tripId: prev.tripId,
           vehicleId: prev.vehicleId,
           driverId: prev.driverId,
         }))
@@ -967,17 +968,14 @@ export default function EnquiriesPage() {
               <div className="flex items-center justify-between mt-4 mb-2">
                 <SectionTitle>Expenses ({bookingExpenses.length})</SectionTitle>
                 <Button size="sm" variant="secondary" onClick={() => {
-                  const bookingId = liveDetailEnquiry.bookingId || liveDetailEnquiry.enquiryId
-                  // Auto-fill vehicle+driver from the first trip of this booking
-                  const trip = trips.find((t) => (t.bookingId === bookingId || t.enquiryId === bookingId) && t.isDeleted !== 'true')
-                  setExpForm({
-                    date: new Date().toISOString().split('T')[0],
-                    vehicleId: trip?.allocatedVehicleId || '',
-                    driverId: trip?.allocatedDriverId || '',
-                  })
+                  // ExpenseForm handles trip selection + vehicle/driver auto-fill
+                  setExpForm({ date: new Date().toISOString().split('T')[0] })
                   setExpenseTab('fuel')
                   setExpSavedCount(0)
-                  setExpenseModal({ bookingId, enquiryId: liveDetailEnquiry.enquiryId })
+                  setExpenseModal({
+                    bookingId: liveDetailEnquiry.bookingId,
+                    enquiryId: liveDetailEnquiry.enquiryId,
+                  })
                 }}>+ Add Expense</Button>
               </div>
               {bookingExpenses.length === 0 ? (

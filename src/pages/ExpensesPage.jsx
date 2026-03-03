@@ -67,20 +67,38 @@ const MULTI_ADD_TABS = new Set(['fuel', 'parking', 'stateTax'])
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Given a bookingId, find the first trip of that booking and return its
- * allocatedVehicleId and allocatedDriverId.
- */
-function getBookingAllocation(bookingId, enquiries, trips) {
-  if (!bookingId) return { vehicleId: '', driverId: '' }
-  // Try to find directly on the enquiry record (some setups store it there)
+/** Get all active trips for a booking — trips link via bookingId OR enquiryId. */
+function getTripsForBooking(bookingId, enquiries, trips) {
+  if (!bookingId) return []
   const enquiry = enquiries.find((e) => e.bookingId === bookingId)
-  // Try trips
-  const trip = trips.find((t) => t.bookingId === bookingId && !t.isDeleted)
-  return {
-    vehicleId: trip?.allocatedVehicleId || '',
-    driverId: trip?.allocatedDriverId || '',
-  }
+  const enquiryId = enquiry?.enquiryId
+  return trips.filter(
+    (t) => t.isDeleted !== 'true' && (
+      t.bookingId === bookingId ||
+      t.enquiryId === enquiryId ||
+      t.enquiryId === bookingId
+    )
+  )
+}
+
+/** Get trips for a raw enquiry/booking context (either id). */
+function getTripsForContext(bookingId, enquiryId, allTrips) {
+  return allTrips.filter(
+    (t) => t.isDeleted !== 'true' && (
+      t.bookingId === bookingId ||
+      t.enquiryId === enquiryId ||
+      t.enquiryId === bookingId
+    )
+  )
+}
+
+/** Human-readable label for a trip dropdown option. */
+function tripLabel(trip) {
+  const parts = [trip.vehicleType, trip.tripType]
+  if (trip.startDate) parts.push(trip.startDate)
+  if (trip.allocatedVehicleNumber) parts.push(trip.allocatedVehicleNumber)
+  if (trip.allocatedDriverName) parts.push(trip.allocatedDriverName)
+  return parts.filter(Boolean).join(' · ')
 }
 
 // ─── IsPaid / PaidDate helper row ────────────────────────────────────────────
@@ -161,11 +179,13 @@ function ParkingEntriesList({ entries, onChange }) {
 // ─── Expense Form (used both in ExpensesPage modal AND in EnquiriesPage popup) ─
 /**
  * Props:
- *   tab: 'fuel' | 'toll' | 'parking' | 'allowance' | 'stateTax' | 'maintenance' | 'salary' | 'business' | 'other'
- *   form, setForm
- *   vehicles, drivers, enquiries (bookingOptions), trips
- *   context: 'page' | 'booking'  — booking context pre-selects vehicleId/driverId
- *   bookingContext: { bookingId, vehicleId, driverId } — passed when context='booking'
+ *   tab          : expense type key
+ *   form, setForm: controlled form state
+ *   vehicles, drivers, enquiries, trips: master data
+ *   context      : 'page' | 'booking'
+ *     - 'booking': trip selector is shown first; vehicle+driver auto-fill from trip
+ *     - 'page'   : booking selector shown; selecting booking loads its trips for tripId
+ *   bookingContext: { bookingId, enquiryId } — provided when context='booking'
  */
 export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries = [], trips = [], context = 'page', bookingContext = null }) {
   const vehicleOptions = vehicles.map((v) => ({ value: v.id, label: `${v.registrationNumber} – ${v.seater}` }))
@@ -173,20 +193,44 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
   const bookingOptions = enquiries.filter((e) => e.bookingId)
     .map((e) => ({ value: e.bookingId, label: `${e.bookingId} – ${e.customerName || e.customerPhone || ''}` }))
 
-  const [parkingEntries, setParkingEntries] = useState(
-    form._parkingEntries || []
-  )
+  const [parkingEntries, setParkingEntries] = useState(form._parkingEntries || [])
 
-  // When booking is selected (from page), auto-fill vehicle+driver
-  const handleBookingSelect = useCallback((bookingId) => {
-    const alloc = getBookingAllocation(bookingId, enquiries, trips)
+  // Trips available for the current booking context
+  const contextTrips = useMemo(() => {
+    if (context === 'booking' && bookingContext) {
+      return getTripsForContext(bookingContext.bookingId, bookingContext.enquiryId, trips)
+    }
+    if (context === 'page' && form.bookingId) {
+      return getTripsForBooking(form.bookingId, enquiries, trips)
+    }
+    return []
+  }, [context, bookingContext, form.bookingId, trips, enquiries])
+
+  const tripOptions = contextTrips.map((t) => ({ value: t.id, label: tripLabel(t) }))
+
+  // When a trip is selected, auto-fill vehicle + driver from that trip
+  const handleTripSelect = useCallback((tripId) => {
+    const trip = trips.find((t) => t.id === tripId)
     setForm((f) => ({
       ...f,
-      bookingId,
-      vehicleId: alloc.vehicleId || f.vehicleId,
-      driverId: alloc.driverId || f.driverId,
+      tripId,
+      vehicleId: trip?.allocatedVehicleId || f.vehicleId,
+      driverId: trip?.allocatedDriverId || f.driverId,
     }))
-  }, [enquiries, trips, setForm])
+  }, [trips, setForm])
+
+  // When booking is selected on page context, load trips and auto-select if only 1
+  const handleBookingSelect = useCallback((bookingId) => {
+    setForm((f) => ({ ...f, bookingId, tripId: '', vehicleId: '', driverId: '' }))
+    // auto-select will be triggered by contextTrips effect below
+  }, [setForm])
+
+  // Auto-select trip if only one available (both contexts)
+  useEffect(() => {
+    if (contextTrips.length === 1 && !form.tripId) {
+      handleTripSelect(contextTrips[0].id)
+    }
+  }, [contextTrips]) // intentionally only on contextTrips change
 
   // Sync parking entries total → form.totalAmount
   useEffect(() => {
@@ -215,41 +259,59 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
     type,
   })
 
-  // Vehicle + driver block (shared across fuel/toll/parking/allowance)
-  const VehicleDriverBlock = ({ driverRequired = true }) => (
-    <>
-      <div>
+  // Trip selector — shown for all trip-linked expense types
+  // Required when trips are available; vehicle+driver auto-fill on selection
+  const TRIP_LINKED_TABS = ['fuel', 'toll', 'parking', 'allowance', 'stateTax']
+  const TripSelect = () => {
+    if (!TRIP_LINKED_TABS.includes(tab)) return null
+    if (context === 'page' && !form.bookingId) return null // no booking selected yet on page
+    if (contextTrips.length === 0) return (
+      <div className="col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-sm text-yellow-700">
+        No trips found for this booking. Add a trip first before recording expenses.
+      </div>
+    )
+    return (
+      <div className="col-span-2">
         <Select
-          label={`Vehicle${driverRequired ? ' *' : ''}`}
-          required={driverRequired}
-          options={vehicleOptions}
-          value={form.vehicleId || ''}
-          onChange={(e) => setForm((prev) => ({ ...prev, vehicleId: e.target.value }))}
-          placeholder="Select vehicle..."
+          label="Trip *"
+          required
+          options={tripOptions}
+          value={form.tripId || ''}
+          onChange={(e) => handleTripSelect(e.target.value)}
+          placeholder={contextTrips.length === 1 ? tripLabel(contextTrips[0]) : 'Select trip...'}
         />
-        {context === 'booking' && !form.vehicleId && (
-          <p className="text-xs text-orange-500 mt-1">No vehicle allocated to this booking — please select manually.</p>
+        {contextTrips.length === 1 && (
+          <p className="text-xs text-green-600 mt-1">✓ Only one trip — auto-selected</p>
         )}
       </div>
+    )
+  }
+
+  // Vehicle + driver block — values come from trip auto-fill, still editable
+  const VehicleDriverBlock = ({ driverRequired = true }) => (
+    <>
+      <Select
+        label={`Vehicle${driverRequired ? ' *' : ''}`}
+        required={driverRequired}
+        options={vehicleOptions}
+        value={form.vehicleId || ''}
+        onChange={(e) => setForm((prev) => ({ ...prev, vehicleId: e.target.value }))}
+        placeholder="Select vehicle..."
+      />
       {driverRequired && (
-        <div>
-          <Select
-            label="Driver *"
-            required
-            options={driverOptions}
-            value={form.driverId || ''}
-            onChange={(e) => setForm((prev) => ({ ...prev, driverId: e.target.value }))}
-            placeholder="Select driver..."
-          />
-          {context === 'booking' && !form.driverId && (
-            <p className="text-xs text-orange-500 mt-1">No driver allocated — please select manually.</p>
-          )}
-        </div>
+        <Select
+          label="Driver *"
+          required
+          options={driverOptions}
+          value={form.driverId || ''}
+          onChange={(e) => setForm((prev) => ({ ...prev, driverId: e.target.value }))}
+          placeholder="Select driver..."
+        />
       )}
     </>
   )
 
-  // Booking selector (only on page context)
+  // Booking selector (page context only)
   const BookingSelect = ({ required = false }) => {
     if (context === 'booking') return null
     return (
@@ -268,8 +330,10 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
     case 'fuel':
       return (
         <div className="grid grid-cols-2 gap-4">
-          <Input label="Date *" required {...f('date', 'date')} />
           <BookingSelect />
+          <TripSelect />
+          <Input label="Date *" required {...f('date', 'date')} />
+          <div /> {/* spacer */}
           <VehicleDriverBlock />
           <Input label="Amount (₹) *" required {...f('amount', 'number')} />
           <Input label="Odometer Reading (km)" {...f('odometer', 'number')} />
@@ -281,6 +345,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
       return (
         <div className="grid grid-cols-2 gap-4">
           <BookingSelect />
+          <TripSelect />
           <VehicleDriverBlock />
           <Input label="Total Amount (₹) *" required {...f('totalAmount', 'number')} />
           <Input label="Notes" {...f('notes')} />
@@ -291,6 +356,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
       return (
         <div className="grid grid-cols-2 gap-4">
           <BookingSelect />
+          <TripSelect />
           <VehicleDriverBlock />
           <Input label="Total Amount (₹)" {...f('totalAmount', 'number')} />
           <Input label="Notes" {...f('notes')} />
@@ -302,6 +368,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
       return (
         <div className="grid grid-cols-2 gap-4">
           <BookingSelect />
+          <TripSelect />
           <VehicleDriverBlock />
           <Input label="Amount Per Day (₹) *" required {...f('amountPerDay', 'number')} />
           <Input label="Number of Days *" required {...f('numberOfDays', 'number')} />
@@ -336,6 +403,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
       return (
         <div className="grid grid-cols-2 gap-4">
           <BookingSelect />
+          <TripSelect />
           <Select
             label="Vehicle *"
             required
