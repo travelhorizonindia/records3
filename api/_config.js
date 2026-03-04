@@ -65,7 +65,6 @@ export const SHEET_CONFIG = {
       'guestName', 'guestPhone', 'alternateContactName', 'alternateContactPhone',
       'pickupDateTime', 'pickupLocation', 'trainFlightNumber', 'dropLocation',
       'customerRequests', 'notes', 'enquiryQuote', 'bookingQuote',
-      'totalAmount', 'amountReceived', 'amountPending',
       'customerStatus',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
@@ -73,7 +72,7 @@ export const SHEET_CONFIG = {
   Trips: {
     spreadsheetId: SPREADSHEET_IDS.operations,
     headers: [
-      'id', 'bookingId', 'enquiryId', 'tripType', 'localSubType',
+      'id', 'sequence', 'bookingId', 'enquiryId', 'tripType', 'localSubType',
       'vehicleType', 'startDate', 'endDate', 'travelPlan',
       'pickupDateTime', 'pickupLocation', 'dropLocation',
       'trainFlightNumber', 'customerRequests', 'notes',

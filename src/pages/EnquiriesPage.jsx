@@ -59,8 +59,7 @@ const emptyTripForm = () => ({
 })
 
 const emptyBookingFields = () => ({
-  bookingQuote: '', totalAmount: '', amountReceived: '', amountPending: '',
-  pickupDateTime: '', pickupLocation: '', dropLocation: '', trainFlightNumber: '',
+  bookingQuote: '',
 })
 
 const emptyPaymentForm = () => ({
@@ -196,14 +195,83 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDef
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// ─── Per-trip financials inline row ──────────────────────────────────────────
+
+function TripFinancialsRow({ trip, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [vals, setVals] = useState({
+    totalAmount: trip.totalAmount || '',
+    amountReceived: trip.amountReceived || '',
+    amountPending: trip.amountPending || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  // Keep in sync if trip prop updates (after refetch)
+  useEffect(() => {
+    setVals({
+      totalAmount: trip.totalAmount || '',
+      amountReceived: trip.amountReceived || '',
+      amountPending: trip.amountPending || '',
+    })
+  }, [trip.totalAmount, trip.amountReceived, trip.amountPending])
+
+  // Auto-calc pending = total - received
+  useEffect(() => {
+    const total = parseFloat(vals.totalAmount || 0)
+    const recv = parseFloat(vals.amountReceived || 0)
+    if (total || recv) {
+      setVals(v => ({ ...v, amountPending: String(Math.max(0, total - recv)) }))
+    }
+  }, [vals.totalAmount, vals.amountReceived])
+
+  const hasValues = trip.totalAmount || trip.amountReceived || trip.amountPending
+
+  if (!editing) return (
+    <div className="mt-2 flex items-center gap-3 text-xs">
+      {hasValues ? (<>
+        <span className="text-blue-600 font-medium">Total: {formatCurrency(trip.totalAmount)}</span>
+        <span className="text-green-600">Recv: {formatCurrency(trip.amountReceived)}</span>
+        <span className={parseFloat(trip.amountPending) > 0 ? 'text-orange-500 font-medium' : 'text-gray-400'}>
+          Pending: {formatCurrency(trip.amountPending)}
+        </span>
+      </>) : (
+        <span className="text-gray-300">No amount set</span>
+      )}
+      <button type="button" onClick={() => setEditing(true)}
+        className="text-blue-400 hover:text-blue-600 underline ml-1">
+        {hasValues ? 'Edit' : 'Add amounts'}
+      </button>
+    </div>
+  )
+
+  return (
+    <div className="mt-2 flex items-end gap-2 flex-wrap">
+      <Input label="Total (₹)" type="number" value={vals.totalAmount}
+        onChange={(e) => setVals(v => ({ ...v, totalAmount: e.target.value }))}
+        className="w-28" />
+      <Input label="Received (₹)" type="number" value={vals.amountReceived}
+        onChange={(e) => setVals(v => ({ ...v, amountReceived: e.target.value }))}
+        className="w-28" />
+      <Input label="Pending (₹)" type="number" value={vals.amountPending}
+        onChange={(e) => setVals(v => ({ ...v, amountPending: e.target.value }))}
+        className="w-28" />
+      <div className="flex gap-1 mb-0.5">
+        <Button size="sm" loading={saving} onClick={async () => {
+          setSaving(true)
+          await onSave(vals)
+          setEditing(false)
+          setSaving(false)
+        }}>Save</Button>
+        <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Convert to Booking inline (used inside detail popup) ────────────────────
 
 function ConvertToBookingInline({ enquiry, onDone, user }) {
-  const [fields, setFields] = useState({
-    pickupDateTime: '', pickupLocation: '', dropLocation: '',
-    trainFlightNumber: '', totalAmount: '', amountReceived: '', amountPending: '',
-    bookingQuote: '',
-  })
+  const [fields, setFields] = useState({ bookingQuote: '' })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -223,22 +291,7 @@ function ConvertToBookingInline({ enquiry, onDone, user }) {
     <div className="space-y-3">
       {err && <p className="text-xs text-red-500">{err}</p>}
       <p className="text-xs text-blue-600">All fields optional — can be filled later via Edit.</p>
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Pickup Date & Time" type="datetime-local" value={fields.pickupDateTime}
-          onChange={(e) => setFields(f => ({ ...f, pickupDateTime: e.target.value }))} />
-        <Input label="Pickup Location" value={fields.pickupLocation}
-          onChange={(e) => setFields(f => ({ ...f, pickupLocation: e.target.value }))} />
-        <Input label="Drop Location" value={fields.dropLocation}
-          onChange={(e) => setFields(f => ({ ...f, dropLocation: e.target.value }))} />
-        <Input label="Train / Flight No." value={fields.trainFlightNumber}
-          onChange={(e) => setFields(f => ({ ...f, trainFlightNumber: e.target.value }))} />
-        <Input label="Total Amount (₹)" type="number" value={fields.totalAmount}
-          onChange={(e) => setFields(f => ({ ...f, totalAmount: e.target.value }))} />
-        <Input label="Amount Received (₹)" type="number" value={fields.amountReceived}
-          onChange={(e) => setFields(f => ({ ...f, amountReceived: e.target.value }))} />
-        <Input label="Amount Pending (₹)" type="number" value={fields.amountPending}
-          onChange={(e) => setFields(f => ({ ...f, amountPending: e.target.value }))} />
-      </div>
+      <p className="text-xs text-gray-400">Pickup details and financials are managed per-trip. Add them via the trip cards above after confirming.</p>
       <div className="flex justify-end pt-1">
         <Button onClick={handleConvert} loading={saving} variant="success">
           Confirm Booking → Upcoming
@@ -340,7 +393,11 @@ export default function EnquiriesPage() {
       if (filterDateTo && e.createdAt && e.createdAt.split('T')[0] > filterDateTo) return false
 
       // Pending payments only
-      if (filterPendingOnly && !(parseFloat(e.amountPending) > 0)) return false
+      if (filterPendingOnly) {
+        const ePendingTrips = trips.filter(t => (t.bookingId === e.bookingId || t.enquiryId === e.enquiryId) && t.isDeleted !== 'true')
+        const pending = ePendingTrips.reduce((s, t) => s + parseFloat(t.amountPending || 0), 0)
+        if (!(pending > 0)) return false
+      }
 
       // Bookings only
       if (filterBookingsOnly && !e.bookingId) return false
@@ -524,7 +581,9 @@ export default function EnquiriesPage() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const getEnquiryTrips = useCallback(
-    (enquiryId) => trips.filter((t) => t.enquiryId === enquiryId || t.bookingId === enquiryId),
+    (enquiryId) => trips
+      .filter((t) => (t.enquiryId === enquiryId || t.bookingId === enquiryId) && t.isDeleted !== 'true')
+      .sort((a, b) => (parseInt(a.sequence) || 999) - (parseInt(b.sequence) || 999)),
     [trips]
   )
   const getEnquiryPayments = useCallback(
@@ -638,7 +697,13 @@ export default function EnquiriesPage() {
       key: 'status', label: 'Status',
       render: (e) => <Badge className={BOOKING_STATUS_COLORS[e.status] || 'bg-gray-100 text-gray-700'}>{e.status}</Badge>,
     },
-    { key: 'amountPending', label: 'Pending', render: (e) => e.amountPending ? formatCurrency(e.amountPending) : '—' },
+    {
+      key: 'amountPending', label: 'Pending', render: (e) => {
+        const eTrips = trips.filter(t => (t.bookingId === e.bookingId || t.enquiryId === e.enquiryId) && t.isDeleted !== 'true')
+        const pending = eTrips.reduce((s, t) => s + parseFloat(t.amountPending || 0), 0)
+        return pending > 0 ? formatCurrency(pending) : '—'
+      }
+    },
     { key: 'createdAt', label: 'Created', render: (e) => formatDate(e.createdAt) },
     {
       key: 'actions', label: '',
@@ -807,26 +872,8 @@ export default function EnquiriesPage() {
             />
             {convertToBooking && (
               <div className="mt-4 space-y-4">
-                <p className="text-xs text-blue-600">Fill booking details now (optional — can be done later via Edit)</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Pickup Date & Time" type="datetime-local" value={bookingFields.pickupDateTime}
-                    onChange={(e) => setBookingFields(f => ({ ...f, pickupDateTime: e.target.value }))} />
-                  <Input label="Pickup Location" value={bookingFields.pickupLocation}
-                    onChange={(e) => setBookingFields(f => ({ ...f, pickupLocation: e.target.value }))} />
-                  <Input label="Drop Location" value={bookingFields.dropLocation}
-                    onChange={(e) => setBookingFields(f => ({ ...f, dropLocation: e.target.value }))} />
-                  <Input label="Train / Flight No." value={bookingFields.trainFlightNumber}
-                    onChange={(e) => setBookingFields(f => ({ ...f, trainFlightNumber: e.target.value }))} />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <Input label="Total Amount (₹)" type="number" value={bookingFields.totalAmount}
-                    onChange={(e) => setBookingFields(f => ({ ...f, totalAmount: e.target.value }))} />
-                  <Input label="Amount Received (₹)" type="number" value={bookingFields.amountReceived}
-                    onChange={(e) => setBookingFields(f => ({ ...f, amountReceived: e.target.value }))} />
-                  <Input label="Amount Pending (₹)" type="number" value={bookingFields.amountPending}
-                    onChange={(e) => setBookingFields(f => ({ ...f, amountPending: e.target.value }))} />
-                </div>
-                <Textarea label="Booking Quote" rows={3} value={bookingFields.bookingQuote}
+                <p className="text-xs text-blue-600">Pickup details and financials are managed per-trip — add them on the trip cards.</p>
+                <Textarea label="Booking Quote / Message" rows={3} value={bookingFields.bookingQuote}
                   onChange={(e) => setBookingFields(f => ({ ...f, bookingQuote: e.target.value }))} />
               </div>
             )}
@@ -930,28 +977,34 @@ export default function EnquiriesPage() {
               {liveDetailEnquiry.notes && <div className="mt-2 text-sm text-gray-600 bg-gray-50 rounded p-3">{liveDetailEnquiry.notes}</div>}
               {liveDetailEnquiry.customerRequests && <div className="mt-2 text-sm text-gray-600 bg-yellow-50 rounded p-3">Requests: {liveDetailEnquiry.customerRequests}</div>}
 
-              {/* Financials — always show if any value present */}
-              {(liveDetailEnquiry.totalAmount || liveDetailEnquiry.amountReceived || liveDetailEnquiry.amountPending) && (
-                <>
-                  <SectionTitle>Financials</SectionTitle>
-                  <div className="grid grid-cols-3 gap-4 mb-2">
-                    <div className="bg-blue-50 rounded-lg p-3">
-                      <p className="text-xs text-blue-600">Total</p>
-                      <p className="text-lg font-bold text-blue-900">{formatCurrency(liveDetailEnquiry.totalAmount)}</p>
+              {/* Financials — summed from trips */}
+              {enquiryTrips.length > 0 && (() => {
+                const tripTotal = enquiryTrips.reduce((s, t) => s + parseFloat(t.totalAmount || 0), 0)
+                const tripReceived = enquiryTrips.reduce((s, t) => s + parseFloat(t.amountReceived || 0), 0)
+                const tripPending = enquiryTrips.reduce((s, t) => s + parseFloat(t.amountPending || 0), 0)
+                if (!tripTotal && !tripReceived && !tripPending) return null
+                return (
+                  <>
+                    <SectionTitle>Financials <span className="text-xs font-normal text-gray-400">(sum of all trips)</span></SectionTitle>
+                    <div className="grid grid-cols-3 gap-4 mb-2">
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <p className="text-xs text-blue-600">Total</p>
+                        <p className="text-lg font-bold text-blue-900">{formatCurrency(tripTotal)}</p>
+                      </div>
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <p className="text-xs text-green-600">Received</p>
+                        <p className="text-lg font-bold text-green-900">{formatCurrency(tripReceived)}</p>
+                      </div>
+                      <div className="bg-yellow-50 rounded-lg p-3">
+                        <p className="text-xs text-yellow-600">Pending</p>
+                        <p className="text-lg font-bold text-yellow-900">{formatCurrency(tripPending)}</p>
+                      </div>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-3">
-                      <p className="text-xs text-green-600">Received</p>
-                      <p className="text-lg font-bold text-green-900">{formatCurrency(liveDetailEnquiry.amountReceived)}</p>
-                    </div>
-                    <div className="bg-yellow-50 rounded-lg p-3">
-                      <p className="text-xs text-yellow-600">Pending</p>
-                      <p className="text-lg font-bold text-yellow-900">{formatCurrency(liveDetailEnquiry.amountPending)}</p>
-                    </div>
-                  </div>
-                </>
-              )}
+                  </>
+                )
+              })()}
 
-              {/* Trips */}
+              {/* Trips — drag to reorder */}
               <div className="flex items-center justify-between mt-4 mb-2">
                 <SectionTitle>Trips ({enquiryTrips.length})</SectionTitle>
                 <Button size="sm" variant="secondary" onClick={() => {
@@ -964,14 +1017,39 @@ export default function EnquiriesPage() {
               ) : (
                 <div className="space-y-2">
                   {enquiryTrips.map((trip, idx) => (
-                    <div key={trip.id} className="border border-gray-100 rounded-lg p-3 text-sm">
+                    <div
+                      key={trip.id}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData('tripId', trip.id) }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={async (e) => {
+                        e.preventDefault()
+                        const draggedId = e.dataTransfer.getData('tripId')
+                        if (draggedId === trip.id) return
+                        // Reorder: build new sequence
+                        const reordered = [...enquiryTrips]
+                        const fromIdx = reordered.findIndex(t => t.id === draggedId)
+                        const toIdx = reordered.findIndex(t => t.id === trip.id)
+                        const [moved] = reordered.splice(fromIdx, 1)
+                        reordered.splice(toIdx, 0, moved)
+                        // Save sequence to each trip
+                        for (let i = 0; i < reordered.length; i++) {
+                          if (String(reordered[i].sequence) !== String(i + 1)) {
+                            await updateTrip(reordered[i].id, { sequence: i + 1 }, user.username)
+                          }
+                        }
+                        await refetchTrips()
+                      }}
+                      className="border border-gray-100 rounded-lg p-3 text-sm cursor-grab active:cursor-grabbing hover:border-blue-200 transition-colors"
+                    >
                       <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs text-gray-400 mr-2">Trip {idx + 1}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-300 select-none">⠿</span>
+                          <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded px-1.5 py-0.5">Trip {idx + 1}</span>
                           <span className="font-medium text-gray-900">{trip.vehicleType}</span>
-                          <span className="text-gray-400 mx-2">·</span>
+                          <span className="text-gray-400">·</span>
                           <span className="text-gray-600">{trip.tripType}</span>
-                          {trip.localSubType && <span className="text-gray-400 ml-1">({trip.localSubType})</span>}
+                          {trip.localSubType && <span className="text-gray-400">({trip.localSubType})</span>}
                         </div>
                         <div className="flex gap-2">
                           <Button size="sm" variant="ghost" onClick={() => {
@@ -984,15 +1062,24 @@ export default function EnquiriesPage() {
                           <Button size="sm" variant="ghost" onClick={async () => { await softDeleteTrip(trip.id, user.username); await refetchTrips() }} className="text-red-500">Del</Button>
                         </div>
                       </div>
-                      <div className="text-gray-500 mt-1">
-                        {trip.pickupDateTime && <span>{formatDateTime(trip.pickupDateTime)} · </span>}
-                        {formatDate(trip.startDate)}{trip.endDate && trip.endDate !== trip.startDate ? ` → ${formatDate(trip.endDate)}` : ''}
-                        {trip.allocatedDriverName && <span> · Driver: {trip.allocatedDriverName}</span>}
-                        {trip.allocatedVehicleNumber && <span> · {trip.allocatedVehicleNumber}</span>}
-                        {(trip.isVendorTrip === 'true' || trip.isVendorTrip === true) && <span className="ml-2 text-orange-600">(Vendor: {trip.vendorName})</span>}
+                      <div className="text-gray-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {trip.pickupDateTime && <span>🕐 {formatDateTime(trip.pickupDateTime)}</span>}
+                        {trip.startDate && <span>📅 {formatDate(trip.startDate)}{trip.endDate && trip.endDate !== trip.startDate ? ` → ${formatDate(trip.endDate)}` : ''}</span>}
+                        {trip.pickupLocation && <span>📍 {trip.pickupLocation}</span>}
+                        {trip.dropLocation && <span>🏁 {trip.dropLocation}</span>}
+                        {trip.trainFlightNumber && <span>✈️ {trip.trainFlightNumber}</span>}
+                        {trip.allocatedDriverName && <span>👤 {trip.allocatedDriverName}</span>}
+                        {trip.allocatedVehicleNumber && <span>🚗 {trip.allocatedVehicleNumber}</span>}
+                        {(trip.isVendorTrip === 'true' || trip.isVendorTrip === true) && <span className="text-orange-600">Vendor: {trip.vendorName}</span>}
                       </div>
+                      {/* Per-trip financials — inline editable */}
+                      <TripFinancialsRow trip={trip} onSave={async (vals) => {
+                        await updateTrip(trip.id, vals, user.username)
+                        await refetchTrips()
+                      }} />
                     </div>
                   ))}
+                  {enquiryTrips.length > 1 && <p className="text-xs text-gray-400 text-center pt-1">Drag trips to reorder</p>}
                 </div>
               )}
 
