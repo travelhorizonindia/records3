@@ -901,21 +901,23 @@ export default function EnquiriesPage() {
               onChange={(e) => setEForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
 
-          {/* Convert to booking checkbox */}
-          <div className="border border-blue-100 rounded-xl bg-blue-50/40 p-4">
-            <Checkbox
-              label="Convert to Booking"
-              checked={convertToBooking}
-              onChange={(e) => setConvertToBooking(e.target.checked)}
-            />
-            {convertToBooking && (
-              <div className="mt-4 space-y-4">
-                <p className="text-xs text-blue-600">Pickup details and financials are managed per-trip — add them on the trip cards.</p>
-                <Textarea label="Booking Quote / Message" rows={3} value={bookingFields.bookingQuote}
-                  onChange={(e) => setBookingFields(f => ({ ...f, bookingQuote: e.target.value }))} />
-              </div>
-            )}
-          </div>
+          {/* Convert to booking checkbox — only when not yet a booking */}
+          {!editEnquiry?.bookingId && (
+            <div className="border border-blue-100 rounded-xl bg-blue-50/40 p-4">
+              <Checkbox
+                label="Convert to Booking"
+                checked={convertToBooking}
+                onChange={(e) => setConvertToBooking(e.target.checked)}
+              />
+              {convertToBooking && (
+                <div className="mt-4 space-y-4">
+                  <p className="text-xs text-blue-600">Pickup details and financials are managed per-trip — add them on the trip cards.</p>
+                  <Textarea label="Booking Quote / Message" rows={3} value={bookingFields.bookingQuote}
+                    onChange={(e) => setBookingFields(f => ({ ...f, bookingQuote: e.target.value }))} />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setEnquiryModal(false)}>Cancel</Button>
