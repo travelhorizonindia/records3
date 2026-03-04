@@ -843,6 +843,44 @@ export default function EnquiriesPage() {
 
           {/* Trips */}
           <div className="pt-1">
+            {/* Existing saved trips (edit mode only) */}
+            {editEnquiry && (() => {
+              const savedTrips = getEnquiryTrips(editEnquiry.enquiryId)
+              if (savedTrips.length === 0) return null
+              return (
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Saved Trips ({savedTrips.length})</p>
+                  <div className="space-y-1.5">
+                    {savedTrips.map((trip, idx) => (
+                      <div key={trip.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                        <div>
+                          <span className="text-xs text-gray-400 mr-2">Trip {idx + 1}</span>
+                          <span className="font-medium text-gray-800">{trip.vehicleType}</span>
+                          <span className="text-gray-400 mx-1.5">·</span>
+                          <span className="text-gray-600">{trip.tripType}</span>
+                          {trip.startDate && <span className="text-gray-400 ml-2">{trip.startDate}</span>}
+                          {trip.allocatedDriverName && <span className="text-gray-400 ml-2">· {trip.allocatedDriverName}</span>}
+                        </div>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => {
+                            setTripForm({
+                              ...emptyTripForm(), ...trip,
+                              pickupTime: trip.pickupDateTime ? trip.pickupDateTime.split('T')[1]?.slice(0, 5) : ''
+                            })
+                            setTripModal({ enquiryId: editEnquiry.enquiryId, bookingId: editEnquiry.bookingId, editTrip: trip })
+                          }}>Edit</Button>
+                          <Button size="sm" variant="ghost" className="text-red-400" onClick={async () => {
+                            await softDeleteTrip(trip.id, user.username)
+                            await refetchTrips()
+                          }}>Del</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+            {/* New trips to add */}
             <InlineTripEditor
               trips={inlineTrips}
               onAdd={(trip) => setInlineTrips(t => [...t, trip])}

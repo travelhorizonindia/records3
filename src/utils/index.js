@@ -52,33 +52,40 @@ export const getUpdateMeta = (username) => ({
 })
 
 // Format date for display
+// Parse a date/datetime string safely.
+// Date-only strings (YYYY-MM-DD) are treated as LOCAL midnight to avoid UTC shift.
+function parseDateSafe(dateStr) {
+  if (!dateStr) return null
+  // Date-only: YYYY-MM-DD (10 chars, no T)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  return new Date(dateStr)
+}
+
 export const formatDate = (dateStr) => {
   if (!dateStr) return '—'
   try {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    })
-  } catch {
-    return dateStr
-  }
+    const d = parseDateSafe(dateStr)
+    if (!d || isNaN(d)) return dateStr
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  } catch { return dateStr }
 }
 
-// Format datetime for display
+// Format datetime. If value is date-only, shows date without time.
 export const formatDateTime = (dateStr) => {
   if (!dateStr) return '—'
   try {
-    return new Date(dateStr).toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+    if (isDateOnly) return formatDate(dateStr)
+    const d = new Date(dateStr)
+    if (isNaN(d)) return dateStr
+    return d.toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     })
-  } catch {
-    return dateStr
-  }
+  } catch { return dateStr }
 }
 
 // Format currency
