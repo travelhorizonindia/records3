@@ -12,6 +12,10 @@ const NAV_ITEMS = [
   { to: '/expenses', label: 'Expenses', icon: '💸' },
 ]
 
+const SETTINGS_ITEMS = [
+  { to: '/settings/quote-config', label: 'Quote Config', icon: '💬', adminOnly: true },
+]
+
 export default function Layout({ children }) {
   const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
@@ -21,6 +25,8 @@ export default function Layout({ children }) {
     logout()
     navigate('/login')
   }
+
+  const visibleSettings = SETTINGS_ITEMS.filter((i) => !i.adminOnly || isAdmin)
 
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -55,10 +61,9 @@ export default function Layout({ children }) {
                   end={item.end}
                   onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                     }`
                   }
                 >
@@ -68,6 +73,34 @@ export default function Layout({ children }) {
               </li>
             ))}
           </ul>
+
+          {/* Settings section — admin only */}
+          {visibleSettings.length > 0 && (
+            <div className="mt-6">
+              <p className="px-3 mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Settings
+              </p>
+              <ul className="space-y-0.5">
+                {visibleSettings.map((item) => (
+                  <li key={item.to}>
+                    <NavLink
+                      to={item.to}
+                      onClick={() => setSidebarOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }`
+                      }
+                    >
+                      <span className="text-base">{item.icon}</span>
+                      {item.label}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </nav>
 
         {/* User info */}

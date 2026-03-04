@@ -22,6 +22,9 @@ import {
   VEHICLE_TYPE_OPTIONS, PAYMENT_MODE_OPTIONS
 } from '../constants/index.js'
 import { formatDate, formatDateTime, formatCurrency, generateId } from '../utils/index.js'
+import { generateQuote, detectTemplate } from '../utils/quoteEngine.js'
+import { quoteConfigService, TEMPLATE_KEYS, TEMPLATE_LABELS } from '../services/quoteConfigService.js'
+import { WhatsAppText } from '../components/WhatsAppText.jsx'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -195,6 +198,81 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDef
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// ─── Quote Field — textarea with WhatsApp preview + generate button ─────────
+
+function QuoteField({ label, value, onChange, onGenerate, trips = [] }) {
+  const [mode, setMode] = useState('edit') // 'edit' | 'preview'
+  const [templateKey, setTemplateKey] = useState(null)
+
+  // Auto-detect template from trips
+  const { templateKey: detectedKey, confidence } = detectTemplate(trips)
+  const activeTemplate = templateKey || detectedKey
+
+  const allTemplateOptions = Object.entries(TEMPLATE_LABELS).map(([k, v]) => ({ value: k, label: v }))
+
+  return (
+    <div className="col-span-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-gray-700">{label}</label>
+        <div className="flex items-center gap-2">
+          {/* Template selector */}
+          <select
+            value={activeTemplate || ''}
+            onChange={(e) => setTemplateKey(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            {allTemplateOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          {confidence === 'auto' && !templateKey && (
+            <span className="text-xs text-green-600">auto-detected</span>
+          )}
+          {/* Generate button */}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => { onGenerate(activeTemplate); setMode('preview') }}
+            title="Generate quote from trip details"
+          >
+            ✨ Generate
+          </Button>
+          {/* Preview/Edit toggle */}
+          {value && (
+            <button
+              type="button"
+              onClick={() => setMode(m => m === 'edit' ? 'preview' : 'edit')}
+              className="text-xs text-blue-500 hover:text-blue-700 underline"
+            >
+              {mode === 'edit' ? 'Preview' : 'Edit'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {mode === 'edit' ? (
+        <textarea
+          rows={8}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Type a message or click ✨ Generate to auto-fill from trip details..."
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+      ) : (
+        <div
+          className="w-full min-h-[180px] border border-gray-200 rounded-xl px-4 py-3 bg-[#dcf8c6]/20 cursor-pointer"
+          onClick={() => setMode('edit')}
+          title="Click to edit"
+        >
+          <WhatsAppText text={value} />
+          <p className="text-xs text-gray-400 mt-3 text-right">Click to edit</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Per-trip financials inline row ──────────────────────────────────────────
 
 function TripFinancialsRow({ trip, onSave }) {
@@ -309,6 +387,7 @@ export default function EnquiriesPage() {
   const { data: agents = [] } = useAsync(getAgents)
   const { data: customers = [], refetch: refetchCustomers } = useAsync(getCustomers)
   const { data: vehicles = [] } = useAsync(getVehicles)
+  const { data: quoteConfigRows = [] } = useAsync(quoteConfigService.getAll)
   const { data: drivers = [] } = useAsync(getDrivers)
   const { data: allPayments = [], refetch: refetchPayments } = useAsync(getPayments)
 
@@ -895,8 +974,21 @@ export default function EnquiriesPage() {
           <div className="grid grid-cols-1 gap-4">
             <Textarea label="Customer Requests" rows={2} value={eForm.customerRequests}
               onChange={(e) => setEForm(f => ({ ...f, customerRequests: e.target.value }))} />
-            <Textarea label="Enquiry Quote / Message" rows={3} value={eForm.enquiryQuote}
-              onChange={(e) => setEForm(f => ({ ...f, enquiryQuote: e.target.value }))} />
+            <QuoteField
+              label="Enquiry Quote / Message"
+              value={eForm.enquiryQuote}
+              onChange={(val) => setEForm(f => ({ ...f, enquiryQuote: val }))}
+              onGenerate={(overrideTemplateKey) => {
+                const tripList = editEnquiry
+                  ? getEnquiryTrips(editEnquiry.enquiryId)
+                  : inlineTrips
+                const { templateKey: detected } = detectTemplate(tripList)
+                const templateKey = overrideTemplateKey || detected
+                const text = generateQuote({ enquiry: eForm, trips: tripList, templateKey, configRows: quoteConfigRows })
+                setEForm(f => ({ ...f, enquiryQuote: text }))
+              }}
+              trips={editEnquiry ? getEnquiryTrips(editEnquiry.enquiryId) : inlineTrips}
+            />
             <Textarea label="Internal Notes" rows={2} value={eForm.notes}
               onChange={(e) => setEForm(f => ({ ...f, notes: e.target.value }))} />
           </div>

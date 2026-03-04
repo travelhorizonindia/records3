@@ -11,6 +11,7 @@ import DriversPage from './pages/DriversPage.jsx'
 import AgentsPage from './pages/AgentsPage.jsx'
 import CustomersPage from './pages/CustomersPage.jsx'
 import ExpensesPage from './pages/ExpensesPage.jsx'
+import QuoteConfigPage from './pages/settings/QuoteConfigPage.jsx'
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
                       <Route path="/agents" element={<AgentsPage />} />
                       <Route path="/customers" element={<CustomersPage />} />
                       <Route path="/expenses" element={<ExpensesPage />} />
+                      <Route path="/settings/quote-config" element={<QuoteConfigPage />} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Layout>

@@ -56,6 +56,24 @@ export const SHEET_CONFIG = {
     ],
   },
 
+  // Quote configuration (rates per vehicle per template)
+  QuoteConfig: {
+    spreadsheetId: SPREADSHEET_IDS.master,
+    headers: [
+      'id', 'vehicleType', 'templateKey',
+      // Local packages
+      'baseKm', 'baseHours', 'basePrice',
+      'extraKmRate', 'extraHourRate', 'driverNightCharge',
+      // Outstation per-day
+      'perDayRate', 'kmPerDay', 'extraKmRate2',
+      // Outstation per-km
+      'perKmRate', 'driverAllowancePerDay',
+      // Shared
+      'tollParkingNote', 'notes',
+      'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
+    ],
+  },
+
   // Operations workbook
   EnquiriesBookings: {
     spreadsheetId: SPREADSHEET_IDS.operations,
