@@ -51,7 +51,7 @@ const emptyTripForm = () => ({
   tripType: '', localSubType: '', vehicleType: '',
   startDate: '', endDate: '', travelPlan: '',
   isVendorTrip: false, vendorName: '', vendorPhone: '', vendorCommission: '',
-  pickupDateTime: '', pickupLocation: '', dropLocation: '',
+  pickupTime: '', pickupLocation: '', dropLocation: '',
   allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '',
   allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '',
   notes: '', customerRequests: '', trainFlightNumber: '',
@@ -150,9 +150,9 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDef
               <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={form.localSubType} onChange={(e) => setForm(f => ({ ...f, localSubType: e.target.value }))} placeholder="Select..." />
             )}
             <Select label="Vehicle Type *" options={VEHICLE_TYPE_OPTIONS} value={form.vehicleType} onChange={(e) => setForm(f => ({ ...f, vehicleType: e.target.value }))} placeholder="Select..." />
-            <Input label="Start Date" type="date" value={form.startDate} onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))} />
+            <Input label="Start / Pickup Date" type="date" value={form.startDate} onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" value={form.endDate} onChange={(e) => setForm(f => ({ ...f, endDate: e.target.value }))} />
-            <Input label="Pickup Date & Time" type="datetime-local" value={form.pickupDateTime} onChange={(e) => setForm(f => ({ ...f, pickupDateTime: e.target.value }))} />
+            <Input label="Pickup Time" type="time" value={form.pickupTime} onChange={(e) => setForm(f => ({ ...f, pickupTime: e.target.value }))} />
             <Input label="Pickup Location" value={form.pickupLocation} onChange={(e) => setForm(f => ({ ...f, pickupLocation: e.target.value }))} />
             <Input label="Drop Location" value={form.dropLocation} onChange={(e) => setForm(f => ({ ...f, dropLocation: e.target.value }))} />
             <Input label="Train / Flight No." value={form.trainFlightNumber} onChange={(e) => setForm(f => ({ ...f, trainFlightNumber: e.target.value }))} />
@@ -176,7 +176,8 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDef
             <Button type="button" variant="secondary" size="sm" onClick={() => { setOpen(false); setForm(emptyTripForm()) }}>Cancel</Button>
             <Button type="button" size="sm" onClick={() => {
               if (!form.tripType || !form.vehicleType) return
-              onAdd({ ...form, _tempId: generateId() })
+              const pickupDateTime = form.startDate && form.pickupTime ? `${form.startDate}T${form.pickupTime}` : form.startDate || ''
+              onAdd({ ...form, pickupDateTime, _tempId: generateId() })
               setForm(emptyTripForm())
               setOpen(false)
             }} disabled={!form.tripType || !form.vehicleType}>
@@ -371,8 +372,10 @@ export default function EnquiriesPage() {
   // ── Save Trip ─────────────────────────────────────────────────────────────
   const [saveTrip, { loading: savingTrip }] = useAsyncCallback(
     useCallback(async (f, enquiryId, bookingId, editTrip) => {
-      if (editTrip) await updateTrip(editTrip.id, f, user.username)
-      else await createTrip({ ...f, enquiryId, bookingId }, user.username)
+      const pickupDateTime = f.startDate && f.pickupTime ? `${f.startDate}T${f.pickupTime}` : f.pickupDateTime || f.startDate || ''
+      const tripData = { ...f, pickupDateTime }
+      if (editTrip) await updateTrip(editTrip.id, tripData, user.username)
+      else await createTrip({ ...tripData, enquiryId, bookingId }, user.username)
       await refetchTrips()
       setTripModal(null)
       setSuccessMsg('Trip saved.')
@@ -745,7 +748,7 @@ export default function EnquiriesPage() {
           {/* Convert to booking checkbox */}
           <div className="border border-blue-100 rounded-xl bg-blue-50/40 p-4">
             <Checkbox
-              label="Convert to Booking directly"
+              label="Convert to Booking"
               checked={convertToBooking}
               onChange={(e) => setConvertToBooking(e.target.checked)}
             />
@@ -1017,10 +1020,10 @@ export default function EnquiriesPage() {
               <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={tripForm.localSubType} onChange={(e) => setTripForm(f => ({ ...f, localSubType: e.target.value }))} />
             )}
             <Select label="Vehicle Type" required options={VEHICLE_TYPE_OPTIONS} value={tripForm.vehicleType} onChange={(e) => setTripForm(f => ({ ...f, vehicleType: e.target.value }))} />
-            <Input label="Start Date" type="date" value={tripForm.startDate} onChange={(e) => setTripForm(f => ({ ...f, startDate: e.target.value }))} />
+            <Input label="Start / Pickup Date" type="date" value={tripForm.startDate} onChange={(e) => setTripForm(f => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" value={tripForm.endDate} onChange={(e) => setTripForm(f => ({ ...f, endDate: e.target.value }))} />
             <Input label="Travel Plan" value={tripForm.travelPlan} onChange={(e) => setTripForm(f => ({ ...f, travelPlan: e.target.value }))} />
-            <Input label="Pickup Date & Time" type="datetime-local" value={tripForm.pickupDateTime} onChange={(e) => setTripForm(f => ({ ...f, pickupDateTime: e.target.value }))} />
+            <Input label="Pickup Time" type="time" value={tripForm.pickupTime || (tripForm.pickupDateTime ? tripForm.pickupDateTime.split("T")[1]?.slice(0, 5) : "")} onChange={(e) => setTripForm(f => ({ ...f, pickupTime: e.target.value, pickupDateTime: f.startDate && e.target.value ? f.startDate + "T" + e.target.value : f.startDate || "" }))} />
             <Input label="Pickup Location" value={tripForm.pickupLocation} onChange={(e) => setTripForm(f => ({ ...f, pickupLocation: e.target.value }))} />
             <Input label="Drop Location" value={tripForm.dropLocation} onChange={(e) => setTripForm(f => ({ ...f, dropLocation: e.target.value }))} />
             <Input label="Train / Flight No." value={tripForm.trainFlightNumber} onChange={(e) => setTripForm(f => ({ ...f, trainFlightNumber: e.target.value }))} />
