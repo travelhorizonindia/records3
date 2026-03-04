@@ -1,6 +1,7 @@
 // Enquiry / Booking statuses
 export const BOOKING_STATUS = {
   ENQUIRY: 'Enquiry',
+  DROPPED_OFF: 'Dropped off',
   UPCOMING: 'Upcoming',
   ONGOING: 'Ongoing',
   COMPLETED: 'Completed',
@@ -9,8 +10,15 @@ export const BOOKING_STATUS = {
 
 export const BOOKING_STATUS_OPTIONS = Object.values(BOOKING_STATUS)
 
+// Statuses valid for enquiries (no bookingId)
+export const ENQUIRY_STATUS_OPTIONS = ['Enquiry', 'Dropped off']
+
+// Statuses valid for confirmed bookings
+export const BOOKING_ONLY_STATUS_OPTIONS = ['Upcoming', 'Ongoing', 'Completed', 'Cancelled']
+
 export const BOOKING_STATUS_COLORS = {
   Enquiry: 'bg-gray-100 text-gray-700',
+  'Dropped off': 'bg-red-100 text-red-500',
   Upcoming: 'bg-blue-100 text-blue-700',
   Ongoing: 'bg-yellow-100 text-yellow-700',
   Completed: 'bg-green-100 text-green-700',

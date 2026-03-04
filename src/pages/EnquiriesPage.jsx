@@ -28,6 +28,7 @@ import { formatDate, formatDateTime, formatCurrency, generateId } from '../utils
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
   { key: 'Enquiry', label: 'Enquiry' },
+  { key: 'Dropped off', label: 'Dropped off' },
   { key: 'Upcoming', label: 'Upcoming' },
   { key: 'Ongoing', label: 'Ongoing' },
   { key: 'Completed', label: 'Completed' },
@@ -194,6 +195,58 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDef
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+// ─── Convert to Booking inline (used inside detail popup) ────────────────────
+
+function ConvertToBookingInline({ enquiry, onDone, user }) {
+  const [fields, setFields] = useState({
+    pickupDateTime: '', pickupLocation: '', dropLocation: '',
+    trainFlightNumber: '', totalAmount: '', amountReceived: '', amountPending: '',
+    bookingQuote: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const handleConvert = async () => {
+    setSaving(true)
+    setErr('')
+    try {
+      await confirmBooking(enquiry.enquiryId, fields, user.username)
+      await onDone()
+    } catch (e) {
+      setErr(e.message)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {err && <p className="text-xs text-red-500">{err}</p>}
+      <p className="text-xs text-blue-600">All fields optional — can be filled later via Edit.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Pickup Date & Time" type="datetime-local" value={fields.pickupDateTime}
+          onChange={(e) => setFields(f => ({ ...f, pickupDateTime: e.target.value }))} />
+        <Input label="Pickup Location" value={fields.pickupLocation}
+          onChange={(e) => setFields(f => ({ ...f, pickupLocation: e.target.value }))} />
+        <Input label="Drop Location" value={fields.dropLocation}
+          onChange={(e) => setFields(f => ({ ...f, dropLocation: e.target.value }))} />
+        <Input label="Train / Flight No." value={fields.trainFlightNumber}
+          onChange={(e) => setFields(f => ({ ...f, trainFlightNumber: e.target.value }))} />
+        <Input label="Total Amount (₹)" type="number" value={fields.totalAmount}
+          onChange={(e) => setFields(f => ({ ...f, totalAmount: e.target.value }))} />
+        <Input label="Amount Received (₹)" type="number" value={fields.amountReceived}
+          onChange={(e) => setFields(f => ({ ...f, amountReceived: e.target.value }))} />
+        <Input label="Amount Pending (₹)" type="number" value={fields.amountPending}
+          onChange={(e) => setFields(f => ({ ...f, amountPending: e.target.value }))} />
+      </div>
+      <div className="flex justify-end pt-1">
+        <Button onClick={handleConvert} loading={saving} variant="success">
+          Confirm Booking → Upcoming
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 export default function EnquiriesPage() {
   const { user, isAdmin } = useAuth()
@@ -831,9 +884,12 @@ export default function EnquiriesPage() {
                 <Badge className={BOOKING_STATUS_COLORS[liveDetailEnquiry.status] || 'bg-gray-100 text-gray-700'}>
                   {liveDetailEnquiry.status}
                 </Badge>
-                {/* Status picker inline */}
+                {/* Context-aware status options */}
                 <div className="flex gap-1 flex-wrap">
-                  {BOOKING_STATUS_OPTIONS.map((s) => (
+                  {(isConfirmed
+                    ? ['Upcoming', 'Ongoing', 'Completed', 'Cancelled']
+                    : ['Enquiry', 'Dropped off']
+                  ).map((s) => (
                     <button key={s} type="button"
                       onClick={() => doStatusUpdate(s)}
                       disabled={updatingStatus || liveDetailEnquiry.status === s}
@@ -860,10 +916,16 @@ export default function EnquiriesPage() {
                 {liveDetailEnquiry.guestName && <InfoRow label="Guest" value={`${liveDetailEnquiry.guestName}${liveDetailEnquiry.guestPhone ? ` · ${liveDetailEnquiry.guestPhone}` : ''}`} />}
                 {liveDetailEnquiry.alternateContactName && <InfoRow label="Alt. Contact" value={`${liveDetailEnquiry.alternateContactName}${liveDetailEnquiry.alternateContactPhone ? ` · ${liveDetailEnquiry.alternateContactPhone}` : ''}`} />}
                 <InfoRow label="Agent" value={agents.find(a => a.id === liveDetailEnquiry.agentId)?.name || '—'} />
-                <InfoRow label="Pickup" value={formatDateTime(liveDetailEnquiry.pickupDateTime)} />
-                <InfoRow label="Pickup Location" value={liveDetailEnquiry.pickupLocation} />
-                <InfoRow label="Drop Location" value={liveDetailEnquiry.dropLocation} />
-                <InfoRow label="Train/Flight" value={liveDetailEnquiry.trainFlightNumber} />
+                {/* Pickup / location from trip(s) */}
+                {enquiryTrips.length === 1 && (<>
+                  <InfoRow label={`Pickup Date (Trip 1)`} value={formatDateTime(enquiryTrips[0].pickupDateTime) || formatDate(enquiryTrips[0].startDate)} />
+                  <InfoRow label="Pickup Location (Trip 1)" value={enquiryTrips[0].pickupLocation} />
+                  <InfoRow label="Drop Location (Trip 1)" value={enquiryTrips[0].dropLocation} />
+                  {enquiryTrips[0].trainFlightNumber && <InfoRow label="Train/Flight (Trip 1)" value={enquiryTrips[0].trainFlightNumber} />}
+                </>)}
+                {enquiryTrips.length > 1 && (
+                  <InfoRow label="Pickup / Location" value="(Multiple trips — see trips below)" />
+                )}
               </div>
               {liveDetailEnquiry.notes && <div className="mt-2 text-sm text-gray-600 bg-gray-50 rounded p-3">{liveDetailEnquiry.notes}</div>}
               {liveDetailEnquiry.customerRequests && <div className="mt-2 text-sm text-gray-600 bg-yellow-50 rounded p-3">Requests: {liveDetailEnquiry.customerRequests}</div>}
@@ -901,10 +963,11 @@ export default function EnquiriesPage() {
                 <p className="text-sm text-gray-400 py-2">No trips added yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {enquiryTrips.map((trip) => (
+                  {enquiryTrips.map((trip, idx) => (
                     <div key={trip.id} className="border border-gray-100 rounded-lg p-3 text-sm">
                       <div className="flex items-center justify-between">
                         <div>
+                          <span className="text-xs text-gray-400 mr-2">Trip {idx + 1}</span>
                           <span className="font-medium text-gray-900">{trip.vehicleType}</span>
                           <span className="text-gray-400 mx-2">·</span>
                           <span className="text-gray-600">{trip.tripType}</span>
@@ -912,7 +975,10 @@ export default function EnquiriesPage() {
                         </div>
                         <div className="flex gap-2">
                           <Button size="sm" variant="ghost" onClick={() => {
-                            setTripForm({ ...emptyTripForm(), ...trip })
+                            setTripForm({
+                              ...emptyTripForm(), ...trip,
+                              pickupTime: trip.pickupDateTime ? trip.pickupDateTime.split('T')[1]?.slice(0, 5) : ''
+                            })
                             setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: trip })
                           }}>Edit</Button>
                           <Button size="sm" variant="ghost" onClick={async () => { await softDeleteTrip(trip.id, user.username); await refetchTrips() }} className="text-red-500">Del</Button>
@@ -920,13 +986,28 @@ export default function EnquiriesPage() {
                       </div>
                       <div className="text-gray-500 mt-1">
                         {trip.pickupDateTime && <span>{formatDateTime(trip.pickupDateTime)} · </span>}
-                        {formatDate(trip.startDate)} → {formatDate(trip.endDate)}
+                        {formatDate(trip.startDate)}{trip.endDate && trip.endDate !== trip.startDate ? ` → ${formatDate(trip.endDate)}` : ''}
                         {trip.allocatedDriverName && <span> · Driver: {trip.allocatedDriverName}</span>}
                         {trip.allocatedVehicleNumber && <span> · {trip.allocatedVehicleNumber}</span>}
                         {(trip.isVendorTrip === 'true' || trip.isVendorTrip === true) && <span className="ml-2 text-orange-600">(Vendor: {trip.vendorName})</span>}
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Convert to Booking — only for unconfirmed enquiries */}
+              {!isConfirmed && (
+                <div className="mt-4 border border-blue-100 rounded-xl bg-blue-50/40 p-4">
+                  <p className="text-sm font-semibold text-blue-800 mb-3">Convert to Booking</p>
+                  <ConvertToBookingInline
+                    enquiry={liveDetailEnquiry}
+                    onDone={async () => {
+                      await refetchEnquiries()
+                      setDetailEnquiry(null)
+                    }}
+                    user={user}
+                  />
                 </div>
               )}
 
