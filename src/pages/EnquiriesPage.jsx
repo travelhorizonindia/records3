@@ -503,20 +503,11 @@ export default function EnquiriesPage() {
     useCallback(async (f, tripsToCreate, isBooking, bFields) => {
       let savedEnquiryId = editEnquiry?.enquiryId
 
-      if (editEnquiry) {
-        await updateEnquiry(editEnquiry.enquiryId, f, user.username)
-      } else {
-        const res = await createEnquiry(
-          { ...f, isAgentBooking: isAgentBooking ? 'true' : 'false' },
-          user.username
-        )
-        savedEnquiryId = res?.data?.enquiryId
-      }
-
-      // Always upsert customer — create if no customerId, update if exists
+      // ── Step 1: Resolve / upsert customer BEFORE saving enquiry ──────────
+      // This ensures customerId is written into the enquiry record on creation.
       let resolvedCustomerId = f.customerId
       if (f.customerId) {
-        // Update existing customer record if name or phone changed
+        // Existing linked customer — update if name/phone changed
         const existing = customers.find((c) => c.id === f.customerId)
         if (existing && (existing.name !== f.customerName || existing.phone !== f.customerPhone)) {
           await updateCustomer(f.customerId, { name: f.customerName || existing.name, phone: f.customerPhone || existing.phone }, user.username)
@@ -531,15 +522,27 @@ export default function EnquiriesPage() {
             await updateCustomer(byPhone.id, { name: f.customerName }, user.username)
           }
         } else {
-          // Create new customer — ID is generated client-side so we pre-generate it
+          // Create new customer with pre-generated ID
           const newCustomerId = generateId()
           await createCustomer({ id: newCustomerId, name: f.customerName || '', phone: f.customerPhone || '' }, user.username)
           resolvedCustomerId = newCustomerId
         }
         await refetchCustomers()
       }
-      // Strip name/phone from enquiry record — only store customerId
+
+      // Strip name/phone — only store customerId in enquiry record
       f = { ...f, customerId: resolvedCustomerId, customerName: undefined, customerPhone: undefined }
+
+      // ── Step 2: Save the enquiry record (now with customerId populated) ──
+      if (editEnquiry) {
+        await updateEnquiry(editEnquiry.enquiryId, f, user.username)
+      } else {
+        const res = await createEnquiry(
+          { ...f, isAgentBooking: isAgentBooking ? 'true' : 'false' },
+          user.username
+        )
+        savedEnquiryId = res?.data?.enquiryId
+      }
 
       // If converting to booking, call confirmBooking
       if (isBooking && savedEnquiryId) {
