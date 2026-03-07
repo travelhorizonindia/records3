@@ -458,8 +458,7 @@ export default function EnquiriesPage() {
       // Search
       if (q && !(
         e.enquiryId?.toLowerCase().includes(q) ||
-        e.customerName?.toLowerCase().includes(q) ||
-        e.customerPhone?.toLowerCase().includes(q) ||
+        (() => { const cust = customers.find(c => c.id === e.customerId); return cust?.name?.toLowerCase().includes(q) || cust?.phone?.toLowerCase().includes(q) })() ||
         e.bookingId?.toLowerCase().includes(q) ||
         e.guestName?.toLowerCase().includes(q)
       )) return false
@@ -514,14 +513,32 @@ export default function EnquiriesPage() {
         savedEnquiryId = res?.data?.enquiryId
       }
 
-      // Auto-create customer for direct agents
-      if (!f.customerId && f.customerPhone && isDirectAgent) {
-        const existing = customers.find((c) => c.phone === f.customerPhone)
-        if (!existing) {
-          await createCustomer({ name: f.customerName || '', phone: f.customerPhone }, user.username)
-          await refetchCustomers()
+      // Always upsert customer — create if no customerId, update if exists
+      let resolvedCustomerId = f.customerId
+      if (f.customerId) {
+        // Update existing customer record if name or phone changed
+        const existing = customers.find((c) => c.id === f.customerId)
+        if (existing && (existing.name !== f.customerName || existing.phone !== f.customerPhone)) {
+          await updateCustomer(f.customerId, { name: f.customerName || existing.name, phone: f.customerPhone || existing.phone }, user.username)
         }
+      } else if (f.customerPhone || f.customerName) {
+        // Check if phone matches an existing customer
+        const byPhone = f.customerPhone ? customers.find((c) => c.phone === f.customerPhone) : null
+        if (byPhone) {
+          resolvedCustomerId = byPhone.id
+          // Update name if changed
+          if (f.customerName && byPhone.name !== f.customerName) {
+            await updateCustomer(byPhone.id, { name: f.customerName }, user.username)
+          }
+        } else {
+          // Create new customer
+          const res = await createCustomer({ name: f.customerName || '', phone: f.customerPhone || '' }, user.username)
+          resolvedCustomerId = res?.data?.id || resolvedCustomerId
+        }
+        await refetchCustomers()
       }
+      // Strip name/phone from enquiry record — only store customerId
+      f = { ...f, customerId: resolvedCustomerId, customerName: undefined, customerPhone: undefined }
 
       // If converting to booking, call confirmBooking
       if (isBooking && savedEnquiryId) {
@@ -696,7 +713,8 @@ export default function EnquiriesPage() {
   const openEditEnquiry = (e) => {
     setEditEnquiry(e)
     setEForm({
-      customerPhone: e.customerPhone || '', customerName: e.customerName || '',
+      customerPhone: customers.find(c => c.id === e.customerId)?.phone || e.customerPhone || '',
+      customerName: customers.find(c => c.id === e.customerId)?.name || e.customerName || '',
       customerId: e.customerId || '', agentId: e.agentId || '',
       guestName: e.guestName || '', guestPhone: e.guestPhone || '',
       alternateContactName: e.alternateContactName || '', alternateContactPhone: e.alternateContactPhone || '',
@@ -763,8 +781,8 @@ export default function EnquiriesPage() {
       key: 'customer', label: 'Customer / Guest',
       render: (e) => (
         <div>
-          <p className="font-medium">{e.customerName || e.guestName || '—'}</p>
-          <p className="text-xs text-gray-400">{e.customerPhone || e.guestPhone || ''}</p>
+          <p className="font-medium">{customers.find(c => c.id === e.customerId)?.name || e.guestName || '—'}</p>
+          <p className="text-xs text-gray-400">{customers.find(c => c.id === e.customerId)?.phone || e.guestPhone || ''}</p>
         </div>
       ),
     },
@@ -1090,8 +1108,8 @@ export default function EnquiriesPage() {
               <div className="grid grid-cols-2 gap-x-4">
                 <InfoRow label="Enquiry ID" value={liveDetailEnquiry.enquiryId} />
                 <InfoRow label="Booking ID" value={liveDetailEnquiry.bookingId || '—'} />
-                <InfoRow label="Customer" value={liveDetailEnquiry.customerName} />
-                <InfoRow label="Customer Phone" value={liveDetailEnquiry.customerPhone} />
+                <InfoRow label="Customer" value={customers.find(c => c.id === liveDetailEnquiry.customerId)?.name || liveDetailEnquiry.customerName || '—'} />
+                <InfoRow label="Customer Phone" value={customers.find(c => c.id === liveDetailEnquiry.customerId)?.phone || liveDetailEnquiry.customerPhone || '—'} />
                 {liveDetailEnquiry.guestName && <InfoRow label="Guest" value={`${liveDetailEnquiry.guestName}${liveDetailEnquiry.guestPhone ? ` · ${liveDetailEnquiry.guestPhone}` : ''}`} />}
                 {liveDetailEnquiry.alternateContactName && <InfoRow label="Alt. Contact" value={`${liveDetailEnquiry.alternateContactName}${liveDetailEnquiry.alternateContactPhone ? ` · ${liveDetailEnquiry.alternateContactPhone}` : ''}`} />}
                 <InfoRow label="Agent" value={agents.find(a => a.id === liveDetailEnquiry.agentId)?.name || '—'} />

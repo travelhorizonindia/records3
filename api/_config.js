@@ -78,8 +78,7 @@ export const SHEET_CONFIG = {
   EnquiriesBookings: {
     spreadsheetId: SPREADSHEET_IDS.operations,
     headers: [
-      'enquiryId', 'bookingId', 'customerPhone', 'customerName',
-      'agentId', 'customerId', 'isAgentBooking', 'status',
+      'enquiryId', 'bookingId', 'customerId', 'agentId', 'isAgentBooking', 'status',
       'guestName', 'guestPhone', 'alternateContactName', 'alternateContactPhone',
       'pickupDateTime', 'pickupLocation', 'trainFlightNumber', 'dropLocation',
       'customerRequests', 'notes', 'enquiryQuote', 'bookingQuote',
