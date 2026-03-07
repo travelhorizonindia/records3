@@ -531,9 +531,10 @@ export default function EnquiriesPage() {
             await updateCustomer(byPhone.id, { name: f.customerName }, user.username)
           }
         } else {
-          // Create new customer
-          const res = await createCustomer({ name: f.customerName || '', phone: f.customerPhone || '' }, user.username)
-          resolvedCustomerId = res?.data?.id || resolvedCustomerId
+          // Create new customer — ID is generated client-side so we pre-generate it
+          const newCustomerId = generateId()
+          await createCustomer({ id: newCustomerId, name: f.customerName || '', phone: f.customerPhone || '' }, user.username)
+          resolvedCustomerId = newCustomerId
         }
         await refetchCustomers()
       }

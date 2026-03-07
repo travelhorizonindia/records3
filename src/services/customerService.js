@@ -9,7 +9,7 @@ export const getCustomers = async () => {
 }
 
 export const createCustomer = async (customerData, username) => {
-  const record = { id: generateId(), ...customerData, ...getCreateMeta(username) }
+  const record = { ...customerData, id: customerData.id || generateId(), ...getCreateMeta(username) }
   return api.create(SHEET, record)
 }
 
