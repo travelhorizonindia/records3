@@ -565,7 +565,9 @@ export default function EnquiriesPage() {
 
       // ── Step 2: Save the enquiry record (now with customerId populated) ──
       if (editEnquiry) {
-        await updateEnquiry(editEnquiry.enquiryId, f, user.username)
+        // For confirmed bookings, also save bookingQuote
+        const updatePayload = editEnquiry.bookingId ? { ...f, bookingQuote: bFields.bookingQuote } : f
+        await updateEnquiry(editEnquiry.enquiryId, updatePayload, user.username)
       } else {
         const res = await createEnquiry(
           { ...f, isAgentBooking: isAgentBooking ? 'true' : 'false' },
@@ -756,7 +758,7 @@ export default function EnquiriesPage() {
     })
     setInlineTrips([])
     setConvertToBooking(false)
-    setBookingFields(emptyBookingFields())
+    setBookingFields({ bookingQuote: e.bookingQuote || '' })
     setEErrors({})
     setFormError('')
     setEnquiryModal(true)
@@ -1064,6 +1066,16 @@ export default function EnquiriesPage() {
             </div>
           )}
 
+          {/* Booking quote — editable when already a confirmed booking */}
+          {editEnquiry?.bookingId && (
+            <div className="border border-green-100 rounded-xl bg-green-50/30 p-4">
+              <p className="text-sm font-medium text-green-800 mb-2">Booking Quote / Message</p>
+              <Textarea rows={3} value={bookingFields.bookingQuote}
+                onChange={(e) => setBookingFields(f => ({ ...f, bookingQuote: e.target.value }))}
+                placeholder="Add a booking confirmation message..." />
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setEnquiryModal(false)}>Cancel</Button>
             <Button type="submit" loading={savingEnquiry} variant={convertToBooking ? 'success' : 'primary'}>
@@ -1161,6 +1173,46 @@ export default function EnquiriesPage() {
               </div>
               {liveDetailEnquiry.notes && <div className="mt-2 text-sm text-gray-600 bg-gray-50 rounded p-3">{liveDetailEnquiry.notes}</div>}
               {liveDetailEnquiry.customerRequests && <div className="mt-2 text-sm text-gray-600 bg-yellow-50 rounded p-3">Requests: {liveDetailEnquiry.customerRequests}</div>}
+
+              {/* Quote(s) — read-only preview with WhatsApp send button */}
+              {(liveDetailEnquiry.enquiryQuote || liveDetailEnquiry.bookingQuote) && (() => {
+                const custPhone = customers.find(c => c.id === liveDetailEnquiry.customerId)?.phone || liveDetailEnquiry.customerPhone || ''
+                const waPhone = custPhone.replace(/\D/g, '').replace(/^0+/, '')
+                const waPhoneFormatted = waPhone.length === 10 ? '91' + waPhone : waPhone
+
+                const QuoteBlock = ({ title, text, bgClass }) => {
+                  const waUrl = waPhoneFormatted && text ? `https://wa.me/${waPhoneFormatted}?text=${encodeURIComponent(text)}` : null
+                  return (
+                    <div className={`mt-3 rounded-xl px-4 py-3 ${bgClass}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{title}</p>
+                        {waUrl && (
+                          <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                            title={`Send to ${custPhone} on WhatsApp`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25D366] hover:bg-[#1ebe5d] transition-colors text-white text-xs font-medium">
+                            <svg viewBox="0 0 24 24" fill="white" className="w-3.5 h-3.5">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                            </svg>
+                            Send
+                          </a>
+                        )}
+                      </div>
+                      <WhatsAppText text={text} />
+                    </div>
+                  )
+                }
+
+                return (
+                  <>
+                    {liveDetailEnquiry.enquiryQuote && (
+                      <QuoteBlock title="Enquiry Quote" text={liveDetailEnquiry.enquiryQuote} bgClass="bg-[#dcf8c6]/20 border border-[#25D366]/20" />
+                    )}
+                    {liveDetailEnquiry.bookingQuote && (
+                      <QuoteBlock title="Booking Quote" text={liveDetailEnquiry.bookingQuote} bgClass="bg-green-50 border border-green-200" />
+                    )}
+                  </>
+                )
+              })()}
 
               {/* Financials — summed from trips */}
               {enquiryTrips.length > 0 && (() => {
@@ -1320,21 +1372,23 @@ export default function EnquiriesPage() {
                 </>
               )}
 
-              {/* Expenses */}
-              <div className="flex items-center justify-between mt-4 mb-2">
-                <SectionTitle>Expenses ({bookingExpenses.length})</SectionTitle>
-                <Button size="sm" variant="secondary" onClick={() => {
-                  // ExpenseForm handles trip selection + vehicle/driver auto-fill
-                  setExpForm({ date: new Date().toISOString().split('T')[0] })
-                  setExpenseTab('fuel')
-                  setExpSavedCount(0)
-                  setExpenseModal({
-                    bookingId: liveDetailEnquiry.bookingId,
-                    enquiryId: liveDetailEnquiry.enquiryId,
-                  })
-                }}>+ Add Expense</Button>
-              </div>
-              {bookingExpenses.length === 0 ? (
+              {/* Expenses — only for confirmed bookings */}
+              {isConfirmed && (
+                <div className="flex items-center justify-between mt-4 mb-2">
+                  <SectionTitle>Expenses ({bookingExpenses.length})</SectionTitle>
+                  <Button size="sm" variant="secondary" onClick={() => {
+                    // ExpenseForm handles trip selection + vehicle/driver auto-fill
+                    setExpForm({ date: new Date().toISOString().split('T')[0] })
+                    setExpenseTab('fuel')
+                    setExpSavedCount(0)
+                    setExpenseModal({
+                      bookingId: liveDetailEnquiry.bookingId,
+                      enquiryId: liveDetailEnquiry.enquiryId,
+                    })
+                  }}>+ Add Expense</Button>
+                </div>
+              )}
+              {isConfirmed && (bookingExpenses.length === 0 ? (
                 <p className="text-sm text-gray-400 py-2">No expenses recorded for this booking.</p>
               ) : (
                 <div className="space-y-1">
@@ -1352,7 +1406,7 @@ export default function EnquiriesPage() {
                     </div>
                   ))}
                 </div>
-              )}
+              ))}
             </div>
           )
         })()}
