@@ -164,6 +164,13 @@ export const SHEET_CONFIG = {
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
+  VehicleServiceHistory: {
+    spreadsheetId: SPREADSHEET_IDS.financials,
+    headers: [
+      'id', 'vehicleId', 'date', 'odometerKm', 'serviceType', 'wheelPosition', 'notes',
+      'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
+    ],
+  },
   DriverSalary: {
     spreadsheetId: SPREADSHEET_IDS.financials,
     headers: [

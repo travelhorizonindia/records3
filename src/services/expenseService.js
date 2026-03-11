@@ -38,6 +38,9 @@ export const driverAllowanceService = makeExpenseService('DriverAllowances')
 export const vehicleMaintenanceService = makeExpenseService('VehicleMaintenance')
 export const otherExpenseService = makeExpenseService('OtherExpenses', { hasVerified: false })
 
+// Vehicle service history — no isVerified (it's a log not a financial record)
+export const vehicleServiceHistoryService = makeExpenseService('VehicleServiceHistory', { hasVerified: false })
+
 // Driver salary — no isVerified, has isPaid / salaryMonth
 export const driverSalaryService = {
   ...makeExpenseService('DriverSalary', { hasVerified: false }),
