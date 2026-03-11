@@ -329,7 +329,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
   switch (tab) {
     case 'fuel':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BookingSelect />
           <TripSelect />
           <Input label="Date *" required {...f('date', 'date')} />
@@ -343,7 +343,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'toll':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BookingSelect />
           <TripSelect />
           <VehicleDriverBlock />
@@ -354,7 +354,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'parking':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BookingSelect />
           <TripSelect />
           <VehicleDriverBlock />
@@ -366,7 +366,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'allowance':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BookingSelect />
           <TripSelect />
           <VehicleDriverBlock />
@@ -401,7 +401,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
     case 'stateTax': {
       const aitpValue = form.isAitpEvaluation  // 'paid' | 'aitp' | undefined
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BookingSelect />
           <TripSelect />
           <Select
@@ -465,7 +465,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'maintenance':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Date *" required {...f('date', 'date')} />
           <Select
             label="Vehicle *"
@@ -483,7 +483,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'salary':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Select
             label="Driver *"
             required
@@ -519,7 +519,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'business':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Select
             label="Expense Month *"
             required
@@ -549,7 +549,7 @@ export function ExpenseForm({ tab, form, setForm, vehicles, drivers, enquiries =
 
     case 'other':
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {context === 'page' && <BookingSelect />}
           <Input label="Date *" required {...f('date', 'date')} />
           <Input label="Category *" required {...f('category')} placeholder="e.g. Printing, Refreshments..." />

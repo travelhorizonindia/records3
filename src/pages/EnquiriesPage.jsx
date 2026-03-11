@@ -147,7 +147,7 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, vehicleTy
 
       {open && (
         <div className="border border-blue-100 rounded-xl bg-blue-50/30 p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select label="Trip Type *" options={TRIP_TYPE_OPTIONS} value={form.tripType} onChange={(e) => setForm(f => ({ ...f, tripType: e.target.value }))} placeholder="Select..." />
             {form.tripType === 'Delhi/NCR Local' && (
               <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={form.localSubType} onChange={(e) => setForm(f => ({ ...f, localSubType: e.target.value }))} placeholder="Select..." />
@@ -161,7 +161,7 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, vehicleTy
             <Input label="Train / Flight No." value={form.trainFlightNumber} onChange={(e) => setForm(f => ({ ...f, trainFlightNumber: e.target.value }))} />
             <Input label="Travel Plan" value={form.travelPlan} onChange={(e) => setForm(f => ({ ...f, travelPlan: e.target.value }))} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select label="Allocate Vehicle (Fleet)" options={vehicleOptions} value={form.allocatedVehicleId} onChange={(e) => handleVehicleSelect(e.target.value)} placeholder="From fleet..." />
             <Input label="Or Manual Vehicle No." value={form.allocatedVehicleNumber} onChange={(e) => setForm(f => ({ ...f, allocatedVehicleNumber: e.target.value }))} />
             <Select label="Allocate Driver" options={driverOptions} value={form.allocatedDriverId} onChange={(e) => handleDriverSelect(e.target.value)} placeholder="From drivers..." />
@@ -169,7 +169,7 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, vehicleTy
           </div>
           <Checkbox label="Vendor Trip" checked={form.isVendorTrip === true} onChange={(e) => setForm(f => ({ ...f, isVendorTrip: e.target.checked }))} />
           {form.isVendorTrip && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input label="Vendor Name" value={form.vendorName} onChange={(e) => setForm(f => ({ ...f, vendorName: e.target.value }))} />
               <Input label="Vendor Phone" value={form.vendorPhone} onChange={(e) => setForm(f => ({ ...f, vendorPhone: e.target.value }))} />
               <Input label="Our Commission" value={form.vendorCommission} onChange={(e) => setForm(f => ({ ...f, vendorCommission: e.target.value }))} />
@@ -219,9 +219,9 @@ function QuoteField({ label, value, onChange, onGenerate, trips = [], customerPh
 
   return (
     <div className="col-span-2 space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-y-2">
         <label className="text-sm font-medium text-gray-700">{label}</label>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Template selector */}
           <select
             value={activeTemplate || ''}
@@ -353,16 +353,16 @@ function TripFinancialsRow({ trip, onSave }) {
   )
 
   return (
-    <div className="mt-2 flex items-end gap-2 flex-wrap">
+    <div className="mt-2 flex flex-wrap items-end gap-2">
       <Input label="Total (₹)" type="number" value={vals.totalAmount}
         onChange={(e) => setVals(v => ({ ...v, totalAmount: e.target.value }))}
-        className="w-28" />
+        className="w-full sm:w-28" />
       <Input label="Received (₹)" type="number" value={vals.amountReceived}
         onChange={(e) => setVals(v => ({ ...v, amountReceived: e.target.value }))}
-        className="w-28" />
+        className="w-full sm:w-28" />
       <Input label="Pending (₹)" type="number" value={vals.amountPending}
         onChange={(e) => setVals(v => ({ ...v, amountPending: e.target.value }))}
-        className="w-28" />
+        className="w-full sm:w-28" />
       <div className="flex gap-1 mb-0.5">
         <Button size="sm" loading={saving} onClick={async () => {
           setSaving(true)
@@ -873,29 +873,29 @@ export default function EnquiriesPage() {
           <Tabs tabs={tabsWithCounts} active={tab} onChange={setTab} />
 
           {/* Filter bar */}
-          <div className="flex flex-wrap gap-3 mt-3 items-end">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search ID, name, phone..." className="w-56" />
+          <div className="flex flex-wrap gap-2 sm:gap-3 mt-3 items-end">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search ID, name, phone..." className="w-full sm:w-56" />
 
             <Select
               options={agentOptions}
               value={filterAgent}
               onChange={(e) => setFilterAgent(e.target.value)}
               placeholder="All agents"
-              className="w-44"
+              className="w-full sm:w-44"
             />
 
             <div className="flex items-center gap-1">
-              <label className="text-xs text-gray-500">From</label>
+              <label className="text-xs text-gray-500 whitespace-nowrap">From</label>
               <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full" />
             </div>
             <div className="flex items-center gap-1">
-              <label className="text-xs text-gray-500">To</label>
+              <label className="text-xs text-gray-500 whitespace-nowrap">To</label>
               <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full" />
             </div>
 
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <label className="flex items-center gap-1.5 cursor-pointer text-gray-600">
                 <input type="checkbox" className="rounded border-gray-300 text-blue-600" checked={filterBookingsOnly} onChange={(e) => { setFilterBookingsOnly(e.target.checked); if (e.target.checked) setFilterEnquiriesOnly(false) }} />
                 Bookings only
@@ -949,7 +949,7 @@ export default function EnquiriesPage() {
             Customer Details
             {isAgentBooking && <span className="ml-2 text-xs font-normal text-gray-400 normal-case">(optional for agent bookings)</span>}
           </SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative">
               <Input
                 label={`Customer Phone${isDirectAgent ? ' *' : ''}`}
@@ -976,7 +976,7 @@ export default function EnquiriesPage() {
 
           {/* Guest */}
           <SectionTitle>Travelling Guest <span className="text-xs font-normal text-gray-400 normal-case">(person actually travelling, if different from customer)</span></SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Guest Name" value={eForm.guestName} onChange={(e) => setEForm(f => ({ ...f, guestName: e.target.value }))} />
             <Input label="Guest Phone" type="tel" value={eForm.guestPhone} onChange={(e) => setEForm(f => ({ ...f, guestPhone: e.target.value }))} />
             <Input label="Alternate Contact Name" value={eForm.alternateContactName} onChange={(e) => setEForm(f => ({ ...f, alternateContactName: e.target.value }))} />
@@ -1162,7 +1162,7 @@ export default function EnquiriesPage() {
 
               {/* Info */}
               <SectionTitle>Details</SectionTitle>
-              <div className="grid grid-cols-2 gap-x-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                 <InfoRow label="Enquiry ID" value={liveDetailEnquiry.enquiryId} />
                 <InfoRow label="Booking ID" value={liveDetailEnquiry.bookingId || '—'} />
                 <InfoRow label="Customer" value={customers.find(c => c.id === liveDetailEnquiry.customerId)?.name || liveDetailEnquiry.customerName || '—'} />
@@ -1233,7 +1233,7 @@ export default function EnquiriesPage() {
                 return (
                   <>
                     <SectionTitle>Financials <span className="text-xs font-normal text-gray-400">(sum of all trips)</span></SectionTitle>
-                    <div className="grid grid-cols-3 gap-4 mb-2">
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-2">
                       <div className="bg-blue-50 rounded-lg p-3">
                         <p className="text-xs text-blue-600">Total</p>
                         <p className="text-lg font-bold text-blue-900">{formatCurrency(tripTotal)}</p>
@@ -1289,16 +1289,16 @@ export default function EnquiriesPage() {
                       }}
                       className="border border-gray-100 rounded-lg p-3 text-sm cursor-grab active:cursor-grabbing hover:border-blue-200 transition-colors"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-300 select-none">⠿</span>
-                          <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded px-1.5 py-0.5">Trip {idx + 1}</span>
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                          <span className="text-gray-300 select-none flex-shrink-0">⠿</span>
+                          <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded px-1.5 py-0.5 flex-shrink-0">Trip {idx + 1}</span>
                           <span className="font-medium text-gray-900">{trip.vehicleType}</span>
                           <span className="text-gray-400">·</span>
                           <span className="text-gray-600">{trip.tripType}</span>
                           {trip.localSubType && <span className="text-gray-400">({trip.localSubType})</span>}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button size="sm" variant="ghost" onClick={() => {
                             setTripForm({
                               ...emptyTripForm(), ...trip,
@@ -1431,7 +1431,7 @@ export default function EnquiriesPage() {
           catch (err) { setFormError(err.message) }
         }} className="space-y-4">
           {formError && <Alert type="error" message={formError} />}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Trip Type" required options={TRIP_TYPE_OPTIONS} value={tripForm.tripType} onChange={(e) => setTripForm(f => ({ ...f, tripType: e.target.value }))} />
             {tripForm.tripType === 'Delhi/NCR Local' && (
               <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={tripForm.localSubType} onChange={(e) => setTripForm(f => ({ ...f, localSubType: e.target.value }))} />
@@ -1448,19 +1448,19 @@ export default function EnquiriesPage() {
           <SectionTitle>Vendor (if applicable)</SectionTitle>
           <Checkbox label="Vendor Trip" checked={tripForm.isVendorTrip === true || tripForm.isVendorTrip === 'true'} onChange={(e) => setTripForm(f => ({ ...f, isVendorTrip: e.target.checked }))} />
           {(tripForm.isVendorTrip === true || tripForm.isVendorTrip === 'true') && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input label="Vendor Name" value={tripForm.vendorName} onChange={(e) => setTripForm(f => ({ ...f, vendorName: e.target.value }))} />
               <Input label="Vendor Phone" value={tripForm.vendorPhone} onChange={(e) => setTripForm(f => ({ ...f, vendorPhone: e.target.value }))} />
               <Input label="Our Commission" value={tripForm.vendorCommission} onChange={(e) => setTripForm(f => ({ ...f, vendorCommission: e.target.value }))} />
             </div>
           )}
           <SectionTitle>Vehicle Allocation</SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="From Fleet" options={vehicleOptions} value={tripForm.allocatedVehicleId} onChange={(e) => handleVehicleSelect(e.target.value, setTripForm)} placeholder="Select fleet vehicle..." />
             <Input label="Or Manual: Vehicle No." value={tripForm.allocatedVehicleNumber} onChange={(e) => setTripForm(f => ({ ...f, allocatedVehicleNumber: e.target.value }))} />
           </div>
           <SectionTitle>Driver Allocation</SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="From Driver List" options={driverOptions} value={tripForm.allocatedDriverId} onChange={(e) => handleDriverSelect(e.target.value, setTripForm)} placeholder="Select driver..." />
             <Input label="Or Manual: Driver Name" value={tripForm.allocatedDriverName} onChange={(e) => setTripForm(f => ({ ...f, allocatedDriverName: e.target.value }))} />
             <Input label="Driver Phone" value={tripForm.allocatedDriverPhone} onChange={(e) => setTripForm(f => ({ ...f, allocatedDriverPhone: e.target.value }))} />
@@ -1480,7 +1480,7 @@ export default function EnquiriesPage() {
           try { await savePayment(payForm) } catch (err) { setFormError(err.message) }
         }} className="space-y-4">
           {formError && <Alert type="error" message={formError} />}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Amount (₹)" type="number" required value={payForm.amount} onChange={(e) => setPayForm(f => ({ ...f, amount: e.target.value }))} />
             <Select label="Mode" required options={PAYMENT_MODE_OPTIONS} value={payForm.mode} onChange={(e) => setPayForm(f => ({ ...f, mode: e.target.value }))} />
             <Input label="Received By" required value={payForm.receivedBy} onChange={(e) => setPayForm(f => ({ ...f, receivedBy: e.target.value }))} />

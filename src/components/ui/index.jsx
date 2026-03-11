@@ -1,4 +1,6 @@
-// ─── Button ───────────────────────────────────────────────────────────────────
+import { useState } from 'react'
+
+// ─── Button ──────────────────────────────────────────────────────────────────
 export const Button = ({
   children,
   variant = 'primary',
@@ -21,7 +23,6 @@ export const Button = ({
     md: 'px-4 py-2 text-sm gap-2',
     lg: 'px-5 py-2.5 text-base gap-2',
   }
-
   return (
     <button
       className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
@@ -39,7 +40,7 @@ export const Button = ({
   )
 }
 
-// ─── Input ────────────────────────────────────────────────────────────────────
+// ─── Input ───────────────────────────────────────────────────────────────────
 export const Input = ({ label, error, required, className = '', ...props }) => (
   <div className="space-y-1">
     {label && (
@@ -56,7 +57,7 @@ export const Input = ({ label, error, required, className = '', ...props }) => (
   </div>
 )
 
-// ─── Textarea ─────────────────────────────────────────────────────────────────
+// ─── Textarea ────────────────────────────────────────────────────────────────
 export const Textarea = ({ label, error, required, className = '', rows = 3, ...props }) => (
   <div className="space-y-1">
     {label && (
@@ -74,7 +75,7 @@ export const Textarea = ({ label, error, required, className = '', rows = 3, ...
   </div>
 )
 
-// ─── Select ───────────────────────────────────────────────────────────────────
+// ─── Select ──────────────────────────────────────────────────────────────────
 export const Select = ({ label, error, required, options = [], placeholder = 'Select...', className = '', ...props }) => (
   <div className="space-y-1">
     {label && (
@@ -100,7 +101,7 @@ export const Select = ({ label, error, required, options = [], placeholder = 'Se
   </div>
 )
 
-// ─── Checkbox ─────────────────────────────────────────────────────────────────
+// ─── Checkbox ────────────────────────────────────────────────────────────────
 export const Checkbox = ({ label, className = '', ...props }) => (
   <label className={`flex items-center gap-2 cursor-pointer ${className}`}>
     <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" {...props} />
@@ -108,49 +109,49 @@ export const Checkbox = ({ label, className = '', ...props }) => (
   </label>
 )
 
-// ─── Badge ────────────────────────────────────────────────────────────────────
+// ─── Badge ───────────────────────────────────────────────────────────────────
 export const Badge = ({ children, className = '' }) => (
   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${className}`}>
     {children}
   </span>
 )
 
-// ─── Card ─────────────────────────────────────────────────────────────────────
+// ─── Card ────────────────────────────────────────────────────────────────────
 export const Card = ({ children, className = '' }) => (
   <div className={`bg-white rounded-xl border border-gray-200 shadow-sm ${className}`}>{children}</div>
 )
 
 export const CardHeader = ({ children, className = '' }) => (
-  <div className={`px-5 py-4 border-b border-gray-100 ${className}`}>{children}</div>
+  <div className={`px-4 sm:px-5 py-4 border-b border-gray-100 ${className}`}>{children}</div>
 )
 
 export const CardBody = ({ children, className = '' }) => (
-  <div className={`px-5 py-4 ${className}`}>{children}</div>
+  <div className={`px-4 sm:px-5 py-4 ${className}`}>{children}</div>
 )
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// ─── Modal ───────────────────────────────────────────────────────────────────
 export const Modal = ({ open, onClose, title, children, size = 'md' }) => {
   if (!open) return null
   const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl', '2xl': 'max-w-5xl' }
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4 pb-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-16 px-3 sm:px-4 pb-4 sm:pb-8">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={`relative bg-white rounded-xl shadow-xl w-full ${sizes[size]} max-h-[80vh] flex flex-col`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+      <div className={`relative bg-white rounded-xl shadow-xl w-full ${sizes[size]} max-h-[92vh] sm:max-h-[80vh] flex flex-col`}>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 pr-4">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100 flex-shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <div className="overflow-y-auto flex-1 px-6 py-4">{children}</div>
+        <div className="overflow-y-auto flex-1 px-4 sm:px-6 py-4">{children}</div>
       </div>
     </div>
   )
 }
 
-// ─── Table ────────────────────────────────────────────────────────────────────
+// ─── Table ───────────────────────────────────────────────────────────────────
 export const Table = ({ columns, data, loading, emptyText = 'No records found', onRowClick }) => {
   if (loading) {
     return (
@@ -163,17 +164,13 @@ export const Table = ({ columns, data, loading, emptyText = 'No records found', 
       </div>
     )
   }
-
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200 text-sm">
         <thead>
           <tr className="bg-gray-50">
             {columns.map((col) => (
-              <th
-                key={col.key}
-                className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
-              >
+              <th key={col.key} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                 {col.label}
               </th>
             ))}
@@ -207,7 +204,7 @@ export const Table = ({ columns, data, loading, emptyText = 'No records found', 
   )
 }
 
-// ─── Alert / Toast ────────────────────────────────────────────────────────────
+// ─── Alert / Toast ───────────────────────────────────────────────────────────
 export const Alert = ({ type = 'error', message, onClose }) => {
   if (!message) return null
   const styles = {
@@ -226,7 +223,7 @@ export const Alert = ({ type = 'error', message, onClose }) => {
   )
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Stat Card ───────────────────────────────────────────────────────────────
 export const StatCard = ({ label, value, icon, color = 'blue', sub }) => {
   const colors = {
     blue: 'bg-blue-50 text-blue-600',
@@ -237,15 +234,15 @@ export const StatCard = ({ label, value, icon, color = 'blue', sub }) => {
   }
   return (
     <Card>
-      <CardBody className="flex items-center gap-4">
+      <CardBody className="flex items-center gap-3 sm:gap-4">
         {icon && (
-          <div className={`p-3 rounded-xl ${colors[color]}`}>
+          <div className={`p-2 sm:p-3 rounded-xl flex-shrink-0 ${colors[color]}`}>
             {icon}
           </div>
         )}
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm text-gray-500 truncate">{label}</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
           {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
         </div>
       </CardBody>
@@ -253,7 +250,7 @@ export const StatCard = ({ label, value, icon, color = 'blue', sub }) => {
   )
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// ─── Empty State ─────────────────────────────────────────────────────────────
 export const EmptyState = ({ title, description, action }) => (
   <div className="text-center py-16">
     <div className="text-4xl mb-3">📋</div>
@@ -263,7 +260,7 @@ export const EmptyState = ({ title, description, action }) => (
   </div>
 )
 
-// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+// ─── Confirm Dialog ──────────────────────────────────────────────────────────
 export const ConfirmDialog = ({ open, onConfirm, onCancel, title, message, confirmLabel = 'Delete', variant = 'danger' }) => (
   <Modal open={open} onClose={onCancel} title={title} size="sm">
     <p className="text-sm text-gray-600 mb-6">{message}</p>
@@ -274,18 +271,18 @@ export const ConfirmDialog = ({ open, onConfirm, onCancel, title, message, confi
   </Modal>
 )
 
-// ─── Page Header ──────────────────────────────────────────────────────────────
+// ─── Page Header ─────────────────────────────────────────────────────────────
 export const PageHeader = ({ title, subtitle, actions }) => (
-  <div className="flex items-start justify-between mb-6">
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+  <div className="flex items-start justify-between mb-4 sm:mb-6 gap-3">
+    <div className="min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{title}</h1>
       {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
     </div>
-    {actions && <div className="flex items-center gap-2">{actions}</div>}
+    {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
   </div>
 )
 
-// ─── Search Input ─────────────────────────────────────────────────────────────
+// ─── Search Input ────────────────────────────────────────────────────────────
 export const SearchInput = ({ value, onChange, placeholder = 'Search...', className = '' }) => (
   <div className={`relative ${className}`}>
     <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -301,41 +298,57 @@ export const SearchInput = ({ value, onChange, placeholder = 'Search...', classN
   </div>
 )
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
+// ─── Tabs — desktop: scrollable underline tabs, mobile: native dropdown ──────
 export const Tabs = ({ tabs, active, onChange }) => (
-  <div className="border-b border-gray-200 mb-5">
-    <nav className="flex gap-1 -mb-px">
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          onClick={() => onChange(tab.key)}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            active === tab.key
+  <div>
+    {/* Mobile: dropdown */}
+    <div className="sm:hidden">
+      <select
+        value={active}
+        onChange={(e) => onChange(e.target.value)}
+        className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        {tabs.map((tab) => (
+          <option key={tab.key} value={tab.key}>
+            {tab.label}{tab.count !== undefined ? ` (${tab.count})` : ''}
+          </option>
+        ))}
+      </select>
+    </div>
+    {/* Desktop: scrollable tab bar */}
+    <div className="hidden sm:block border-b border-gray-200 mb-5">
+      <nav className="flex gap-1 -mb-px overflow-x-auto scrollbar-hide">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => onChange(tab.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${active === tab.key
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          {tab.label}
-          {tab.count !== undefined && (
-            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-              active === tab.key ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-            }`}>{tab.count}</span>
-          )}
-        </button>
-      ))}
-    </nav>
+              }`}
+          >
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${active === tab.key ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+                }`}>{tab.count}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+    </div>
   </div>
 )
 
-// ─── Section Divider ──────────────────────────────────────────────────────────
-export const SectionTitle = ({ children }) => (
-  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 mt-5">{children}</h3>
+// ─── Section Title ───────────────────────────────────────────────────────────
+export const SectionTitle = ({ children, className = '' }) => (
+  <h3 className={`text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 mt-5 ${className}`}>{children}</h3>
 )
 
-// ─── Info Row ─────────────────────────────────────────────────────────────────
+// ─── Info Row — label never overlaps value ───────────────────────────────────
+// Uses a min-width label that shrinks gracefully; safe inside any grid column.
 export const InfoRow = ({ label, value }) => (
-  <div className="flex gap-3 py-2 border-b border-gray-50 last:border-0">
-    <span className="text-sm text-gray-500 w-40 flex-shrink-0">{label}</span>
-    <span className="text-sm text-gray-900 font-medium">{value || '—'}</span>
+  <div className="flex gap-2 py-2 border-b border-gray-50 last:border-0 min-w-0">
+    <span className="text-sm text-gray-500 shrink-0 w-28 sm:w-36">{label}</span>
+    <span className="text-sm text-gray-900 font-medium break-words min-w-0">{value || '—'}</span>
   </div>
 )

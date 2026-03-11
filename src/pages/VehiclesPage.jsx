@@ -119,7 +119,7 @@ function ServiceEntryForm({ vehicleId, onSaved, user }) {
     <div className="border border-blue-100 rounded-xl bg-blue-50/40 p-4 mb-4">
       <p className="text-sm font-semibold text-blue-800 mb-3">Log New Service</p>
       {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Input
           label="Date"
           type="date"
@@ -219,7 +219,7 @@ function ServiceHistoryList({ records, onDelete, onUpdate, isAdmin, user }) {
   return (
     <div>
       {/* Summary cards — last change per service type */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
         {SERVICE_TYPES.map((type) => {
           const last = lastByType[type]
           return (
@@ -259,7 +259,7 @@ function ServiceHistoryList({ records, onDelete, onUpdate, isAdmin, user }) {
               {editingRecord === r.id ? (
                 // ── Inline edit form ──────────────────────────────────────────
                 <div className="border border-blue-200 rounded-lg bg-blue-50/40 px-3 py-3 text-sm space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <Input label="Date" type="date" value={editForm.date}
                       onChange={(e) => setEditForm(f => ({ ...f, date: e.target.value }))} />
                     <Input label="Odometer (km)" type="number" value={editForm.odometerKm}
@@ -502,7 +502,7 @@ export default function VehiclesPage() {
           {formError && <Alert type="error" message={formError} />}
 
           <SectionTitle>Basic Info</SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Registration Number" required {...field('registrationNumber')} />
             <Input label="Chassis Number" {...field('chassisNumber')} />
             <Input label="Seating" placeholder='e.g. 4+1' {...field('seater')} />
@@ -512,7 +512,7 @@ export default function VehiclesPage() {
 
           <SectionTitle>Documents</SectionTitle>
           {DOC_FIELDS.map((doc) => (
-            <div key={doc.key} className="grid grid-cols-3 gap-3">
+            <div key={doc.key} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input label={`${doc.label} From`} type="date" {...field(doc.from)} />
               <Input label={`${doc.label} To`} type="date" {...field(doc.to)} />
               <Input label="File URL" placeholder="https://..." {...field(doc.url)} />
@@ -520,11 +520,11 @@ export default function VehiclesPage() {
           ))}
 
           <SectionTitle>Loan Details</SectionTitle>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Checkbox label="Vehicle on Loan" checked={!!form.isOnLoan} onChange={(e) => setForm((f) => ({ ...f, isOnLoan: e.target.checked }))} />
           </div>
           {form.isOnLoan && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input label="Monthly EMI (₹)" type="number" {...field('monthlyLoanEmi')} />
               <Input label="EMI Date" placeholder='e.g. 5th of every month' {...field('emiDate')} />
               <Input label="Loan Free On" type="date" {...field('loanFreeOnDate')} />
@@ -544,7 +544,7 @@ export default function VehiclesPage() {
           <div>
             {/* Basic info */}
             <SectionTitle>Basic Info</SectionTitle>
-            <div className="grid grid-cols-2 gap-x-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
               <InfoRow label="Registration" value={liveDetailVehicle.registrationNumber} />
               <InfoRow label="Chassis" value={liveDetailVehicle.chassisNumber} />
               <InfoRow label="Seating" value={liveDetailVehicle.seater} />
@@ -575,7 +575,7 @@ export default function VehiclesPage() {
             {(liveDetailVehicle.isOnLoan === 'true' || liveDetailVehicle.isOnLoan === true) && (
               <>
                 <SectionTitle>Loan</SectionTitle>
-                <div className="grid grid-cols-2 gap-x-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                   <InfoRow label="Monthly EMI" value={liveDetailVehicle.monthlyLoanEmi ? `₹${liveDetailVehicle.monthlyLoanEmi}` : '—'} />
                   <InfoRow label="EMI Date" value={liveDetailVehicle.emiDate} />
                   <InfoRow label="Loan Free On" value={formatDate(liveDetailVehicle.loanFreeOnDate)} />
