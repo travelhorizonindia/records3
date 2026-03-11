@@ -165,7 +165,13 @@ function ServiceEntryForm({ vehicleId, onSaved, user }) {
 
 // ─── Service History List ─────────────────────────────────────────────────────
 
-function ServiceHistoryList({ records, onDelete, isAdmin }) {
+function ServiceHistoryList({ records, onDelete, onUpdate, isAdmin, user }) {
+  const [showFullHistory, setShowFullHistory] = useState(false)
+  const [editingRecord, setEditingRecord] = useState(null)   // record being edited
+  const [editForm, setEditForm] = useState({})
+  const [deleteConfirm, setDeleteConfirm] = useState(null)  // id to delete
+  const [saving, setSaving] = useState(false)
+
   // Group by serviceType for summary "last changed at" view
   const lastByType = useMemo(() => {
     const map = {}
@@ -181,6 +187,30 @@ function ServiceHistoryList({ records, onDelete, isAdmin }) {
     () => [...records].sort((a, b) => parseFloat(b.odometerKm) - parseFloat(a.odometerKm)),
     [records]
   )
+
+  const startEdit = (r) => {
+    setEditingRecord(r.id)
+    setEditForm({
+      date: r.date || '',
+      odometerKm: r.odometerKm || '',
+      serviceType: r.serviceType || '',
+      wheelPosition: r.wheelPosition || 'All',
+      notes: r.notes || '',
+    })
+  }
+
+  const cancelEdit = () => { setEditingRecord(null); setEditForm({}) }
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      await onUpdate(editingRecord, editForm)
+      setEditingRecord(null)
+      setEditForm({})
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (records.length === 0) {
     return <p className="text-sm text-gray-400 py-3">No service history recorded yet.</p>
@@ -212,39 +242,92 @@ function ServiceHistoryList({ records, onDelete, isAdmin }) {
         })}
       </div>
 
-      {/* Full chronological log */}
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Full History</p>
-      <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-        {sorted.map((r) => (
-          <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-base flex-shrink-0">{SERVICE_ICONS[r.serviceType] || '🔧'}</span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-gray-900">{r.serviceType}</span>
-                  {r.serviceType === 'Brake Pad' && r.wheelPosition && (
-                    <Badge className="bg-orange-50 text-orange-700 text-xs">{r.wheelPosition}</Badge>
+      {/* Full history — toggled */}
+      <button
+        type="button"
+        onClick={() => setShowFullHistory(v => !v)}
+        className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 mb-2"
+      >
+        <span>{showFullHistory ? '▾' : '▸'}</span>
+        {showFullHistory ? 'Hide Full History' : `View Full History (${records.length})`}
+      </button>
+
+      {showFullHistory && (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+          {sorted.map((r) => (
+            <div key={r.id}>
+              {editingRecord === r.id ? (
+                // ── Inline edit form ──────────────────────────────────────────
+                <div className="border border-blue-200 rounded-lg bg-blue-50/40 px-3 py-3 text-sm space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input label="Date" type="date" value={editForm.date}
+                      onChange={(e) => setEditForm(f => ({ ...f, date: e.target.value }))} />
+                    <Input label="Odometer (km)" type="number" value={editForm.odometerKm}
+                      onChange={(e) => setEditForm(f => ({ ...f, odometerKm: e.target.value }))} />
+                    <Select label="Service Type" value={editForm.serviceType}
+                      onChange={(e) => setEditForm(f => ({ ...f, serviceType: e.target.value }))}
+                      options={SERVICE_TYPES.map(s => ({ value: s, label: `${SERVICE_ICONS[s]} ${s}` }))} />
+                    {editForm.serviceType === 'Brake Pad' && (
+                      <Select label="Wheel Position" value={editForm.wheelPosition}
+                        onChange={(e) => setEditForm(f => ({ ...f, wheelPosition: e.target.value }))}
+                        options={WHEEL_POSITIONS} />
+                    )}
+                    <div className="col-span-2">
+                      <Input label="Notes" value={editForm.notes}
+                        onChange={(e) => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+                    <Button size="sm" loading={saving} onClick={saveEdit}>Save</Button>
+                  </div>
+                </div>
+              ) : (
+                // ── Normal row ────────────────────────────────────────────────
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base flex-shrink-0">{SERVICE_ICONS[r.serviceType] || '🔧'}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-gray-900">{r.serviceType}</span>
+                        {r.serviceType === 'Brake Pad' && r.wheelPosition && (
+                          <Badge className="bg-orange-50 text-orange-700 text-xs">{r.wheelPosition}</Badge>
+                        )}
+                        <span className="text-blue-700 font-semibold text-xs">{formatKm(r.odometerKm)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                        <span>{formatDate(r.date)}</span>
+                        {r.notes && <span>· {r.notes}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <button onClick={() => startEdit(r)}
+                        className="text-xs text-blue-500 hover:text-blue-700" title="Edit entry">
+                        Edit
+                      </button>
+                      <button onClick={() => setDeleteConfirm(r.id)}
+                        className="text-xs text-red-400 hover:text-red-600" title="Delete entry">
+                        ✕
+                      </button>
+                    </div>
                   )}
-                  <span className="text-blue-700 font-semibold text-xs">{formatKm(r.odometerKm)}</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
-                  <span>{formatDate(r.date)}</span>
-                  {r.notes && <span>· {r.notes}</span>}
-                </div>
-              </div>
+              )}
             </div>
-            {isAdmin && (
-              <button
-                onClick={() => onDelete(r.id)}
-                className="text-xs text-red-400 hover:text-red-600 flex-shrink-0 ml-2"
-                title="Delete entry"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        onConfirm={async () => { await onDelete(deleteConfirm); setDeleteConfirm(null) }}
+        onCancel={() => setDeleteConfirm(null)}
+        title="Delete Service Entry"
+        message="Are you sure you want to delete this service history entry? This action can be undone by support."
+      />
     </div>
   )
 }
@@ -305,6 +388,12 @@ export default function VehiclesPage() {
   // ── Delete service history entry ────────────────────────────────────────────
   const handleDeleteServiceEntry = useCallback(async (id) => {
     await vehicleServiceHistoryService.softDelete(id, user.username)
+    await refetchHistory()
+  }, [user.username, refetchHistory])
+
+  // ── Update service history entry ────────────────────────────────────────────
+  const handleUpdateServiceEntry = useCallback(async (id, updates) => {
+    await vehicleServiceHistoryService.update(id, updates, user.username)
     await refetchHistory()
   }, [user.username, refetchHistory])
 
@@ -494,8 +583,17 @@ export default function VehiclesPage() {
               </>
             )}
 
+            {/* ── Edit Vehicle button — above Service History ────────────────── */}
+            {isAdmin && (
+              <div className="flex justify-end mt-4 mb-1">
+                <Button variant="secondary" size="sm" onClick={() => { setDetailVehicle(null); openEdit(liveDetailVehicle) }}>
+                  Edit Vehicle
+                </Button>
+              </div>
+            )}
+
             {/* ── Service History ────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between mt-5 mb-3">
+            <div className="flex items-center justify-between mt-3 mb-3">
               <SectionTitle>Service History</SectionTitle>
             </div>
 
@@ -504,23 +602,17 @@ export default function VehiclesPage() {
               <ServiceEntryForm
                 vehicleId={liveDetailVehicle.id}
                 user={user}
-                onSaved={async () => {
-                  await refetchHistory()
-                }}
+                onSaved={async () => { await refetchHistory() }}
               />
             )}
 
             <ServiceHistoryList
               records={vehicleServiceHistory}
               onDelete={handleDeleteServiceEntry}
+              onUpdate={handleUpdateServiceEntry}
               isAdmin={isAdmin}
+              user={user}
             />
-
-            <div className="flex justify-end gap-2 mt-6">
-              {isAdmin && (
-                <Button variant="secondary" onClick={() => { setDetailVehicle(null); openEdit(liveDetailVehicle) }}>Edit Vehicle</Button>
-              )}
-            </div>
           </div>
         )}
       </Modal>
