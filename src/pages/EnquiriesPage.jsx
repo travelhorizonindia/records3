@@ -439,6 +439,7 @@ export default function EnquiriesPage() {
   const [filterPendingOnly, setFilterPendingOnly] = useState(false)
   const [filterBookingsOnly, setFilterBookingsOnly] = useState(false)
   const [filterEnquiriesOnly, setFilterEnquiriesOnly] = useState(false)
+  const [filterToday, setFilterToday] = useState(false)
 
   // ── Modal states ──────────────────────────────────────────────────────────
   const [enquiryModal, setEnquiryModal] = useState(false)
@@ -486,6 +487,7 @@ export default function EnquiriesPage() {
   // ── Filtered list ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
+    const todayStr = new Date().toISOString().split('T')[0]
     return enquiries.filter((e) => {
       // Deleted tab
       if (tab === 'deleted') return e.isDeleted === 'true'
@@ -505,9 +507,14 @@ export default function EnquiriesPage() {
       // Agent filter
       if (filterAgent && e.agentId !== filterAgent) return false
 
-      // Date filter (by createdAt)
-      if (filterDateFrom && e.createdAt && e.createdAt < filterDateFrom) return false
-      if (filterDateTo && e.createdAt && e.createdAt.split('T')[0] > filterDateTo) return false
+      // Today filter — matches createdAt date = today
+      if (filterToday) {
+        if (!e.createdAt || e.createdAt.split('T')[0] !== todayStr) return false
+      } else {
+        // Date range filter (only when today is not active)
+        if (filterDateFrom && e.createdAt && e.createdAt < filterDateFrom) return false
+        if (filterDateTo && e.createdAt && e.createdAt.split('T')[0] > filterDateTo) return false
+      }
 
       // Pending payments only
       if (filterPendingOnly) {
@@ -524,7 +531,7 @@ export default function EnquiriesPage() {
 
       return true
     })
-  }, [enquiries, tab, search, filterAgent, filterDateFrom, filterDateTo, filterPendingOnly, filterBookingsOnly, filterEnquiriesOnly])
+  }, [enquiries, tab, search, filterAgent, filterDateFrom, filterDateTo, filterToday, filterPendingOnly, filterBookingsOnly, filterEnquiriesOnly])
 
   const tabsWithCounts = STATUS_TABS.map((t) => ({
     ...t,
@@ -535,7 +542,7 @@ export default function EnquiriesPage() {
         : enquiries.filter((e) => e.status === t.key && e.isDeleted !== 'true').length,
   }))
 
-  const hasActiveFilters = filterAgent || filterDateFrom || filterDateTo || filterPendingOnly || filterBookingsOnly || filterEnquiriesOnly
+  const hasActiveFilters = filterAgent || filterDateFrom || filterDateTo || filterToday || filterPendingOnly || filterBookingsOnly || filterEnquiriesOnly
 
   // ── Save Enquiry ──────────────────────────────────────────────────────────
   const [saveEnquiry, { loading: savingEnquiry }] = useAsyncCallback(
@@ -884,15 +891,26 @@ export default function EnquiriesPage() {
               className="w-full sm:w-44"
             />
 
+            {/* Today toggle */}
+            <label className={`flex items-center gap-1.5 cursor-pointer text-sm font-medium select-none px-3 py-2 rounded-lg border transition-colors ${filterToday ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+              <input type="checkbox" className="rounded border-gray-300 text-blue-600" checked={filterToday}
+                onChange={(e) => { setFilterToday(e.target.checked); if (e.target.checked) { setFilterDateFrom(''); setFilterDateTo('') } }} />
+              Today
+            </label>
+
             <div className="flex items-center gap-1">
               <label className="text-xs text-gray-500 whitespace-nowrap">From</label>
-              <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full" />
+              <input type="date" value={filterDateFrom} disabled={filterToday}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className={`border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full transition-colors
+                  ${filterToday ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'}`} />
             </div>
             <div className="flex items-center gap-1">
               <label className="text-xs text-gray-500 whitespace-nowrap">To</label>
-              <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full" />
+              <input type="date" value={filterDateTo} disabled={filterToday}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className={`border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full transition-colors
+                  ${filterToday ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'}`} />
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -913,6 +931,7 @@ export default function EnquiriesPage() {
             {hasActiveFilters && (
               <Button size="sm" variant="ghost" onClick={() => {
                 setFilterAgent(''); setFilterDateFrom(''); setFilterDateTo('')
+                setFilterToday(false)
                 setFilterPendingOnly(false); setFilterBookingsOnly(false); setFilterEnquiriesOnly(false)
               }}>Clear filters</Button>
             )}
