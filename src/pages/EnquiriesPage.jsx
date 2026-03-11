@@ -19,7 +19,7 @@ import {
 } from '../components/ui/index.jsx'
 import {
   BOOKING_STATUS_OPTIONS, BOOKING_STATUS_COLORS, TRIP_TYPE_OPTIONS, LOCAL_SUB_TYPE_OPTIONS,
-  VEHICLE_TYPE_OPTIONS, PAYMENT_MODE_OPTIONS
+  PAYMENT_MODE_OPTIONS
 } from '../constants/index.js'
 import { formatDate, formatDateTime, formatCurrency, generateId } from '../utils/index.js'
 import { generateQuote, detectTemplate } from '../utils/quoteEngine.js'
@@ -152,7 +152,7 @@ function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDef
             {form.tripType === 'Delhi/NCR Local' && (
               <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={form.localSubType} onChange={(e) => setForm(f => ({ ...f, localSubType: e.target.value }))} placeholder="Select..." />
             )}
-            <Select label="Vehicle Type *" options={VEHICLE_TYPE_OPTIONS} value={form.vehicleType} onChange={(e) => setForm(f => ({ ...f, vehicleType: e.target.value }))} placeholder="Select..." />
+            <Select label="Vehicle Type *" options={vehicleTypeOptions} value={form.vehicleType} onChange={(e) => setForm(f => ({ ...f, vehicleType: e.target.value }))} placeholder="Select..." />
             <Input label="Start / Pickup Date" type="date" value={form.startDate} onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" value={form.endDate} onChange={(e) => setForm(f => ({ ...f, endDate: e.target.value }))} />
             <Input label="Pickup Time" type="time" value={form.pickupTime} onChange={(e) => setForm(f => ({ ...f, pickupTime: e.target.value }))} />
@@ -418,6 +418,15 @@ export default function EnquiriesPage() {
   const { data: customers = [], refetch: refetchCustomers } = useAsync(getCustomers)
   const { data: vehicles = [] } = useAsync(getVehicles)
   const { data: quoteConfigRows = [] } = useAsync(quoteConfigService.getAll)
+
+  // Vehicle types are mastered in QuoteConfig — derive the live list from DB rows
+  const DEFAULT_VEHICLE_SEED = ['Maruti Dzire', 'Innova Crysta', 'Force Traveller 12+1', 'Force Urbania 16+1']
+  const vehicleTypeOptions = useMemo(() => {
+    const fromDb = [...new Set(quoteConfigRows.map((r) => r.vehicleType).filter(Boolean))]
+    const merged = [...DEFAULT_VEHICLE_SEED]
+    for (const v of fromDb) { if (!merged.includes(v)) merged.push(v) }
+    return merged
+  }, [quoteConfigRows])
   const { data: drivers = [] } = useAsync(getDrivers)
   const { data: allPayments = [], refetch: refetchPayments } = useAsync(getPayments)
 
@@ -1426,7 +1435,7 @@ export default function EnquiriesPage() {
             {tripForm.tripType === 'Delhi/NCR Local' && (
               <Select label="Local Sub-type" options={LOCAL_SUB_TYPE_OPTIONS} value={tripForm.localSubType} onChange={(e) => setTripForm(f => ({ ...f, localSubType: e.target.value }))} />
             )}
-            <Select label="Vehicle Type" required options={VEHICLE_TYPE_OPTIONS} value={tripForm.vehicleType} onChange={(e) => setTripForm(f => ({ ...f, vehicleType: e.target.value }))} />
+            <Select label="Vehicle Type" required options={vehicleTypeOptions} value={tripForm.vehicleType} onChange={(e) => setTripForm(f => ({ ...f, vehicleType: e.target.value }))} />
             <Input label="Start / Pickup Date" type="date" value={tripForm.startDate} onChange={(e) => setTripForm(f => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" value={tripForm.endDate} onChange={(e) => setTripForm(f => ({ ...f, endDate: e.target.value }))} />
             <Input label="Travel Plan" value={tripForm.travelPlan} onChange={(e) => setTripForm(f => ({ ...f, travelPlan: e.target.value }))} />
