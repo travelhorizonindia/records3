@@ -98,7 +98,7 @@ function CustomerMatchDropdown({ phone, customers, onSelect, visible }) {
 
 // ─── Inline trip editor ───────────────────────────────────────────────────────
 
-function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, openByDefault = false }) {
+function InlineTripEditor({ trips, onAdd, onRemove, vehicles, drivers, vehicleTypeOptions = [], openByDefault = false }) {
   const [open, setOpen] = useState(openByDefault)
   const [form, setForm] = useState(emptyTripForm())
 
@@ -1029,6 +1029,7 @@ export default function EnquiriesPage() {
               onRemove={(i) => setInlineTrips(t => t.filter((_, idx) => idx !== i))}
               vehicles={vehicles}
               drivers={drivers}
+              vehicleTypeOptions={vehicleTypeOptions}
             />
           </div>
 
