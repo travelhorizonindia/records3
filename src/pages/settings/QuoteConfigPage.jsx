@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useAuth } from '../../AuthContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { useAsync } from '../../hooks/useAsync.js'
 import {
     quoteConfigService, TEMPLATE_KEYS, TEMPLATE_LABELS, DEFAULT_RATES,
