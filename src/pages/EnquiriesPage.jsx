@@ -28,6 +28,18 @@ import { WhatsAppText } from '../components/WhatsAppText.jsx'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// ─── User list for enquiryBy / bookedBy dropdowns ────────────────────────────
+// Parses the same VITE_DEV_USERS env var used by AuthContext for local dev.
+// In production, you'll want to maintain this list manually or from a config.
+const APP_USERS = (() => {
+  const raw = import.meta.env.VITE_DEV_USERS || ''
+  const parsed = raw.split(',').map((u) => u.trim()).filter(Boolean).map((entry) => {
+    const [username] = entry.split(':')
+    return username
+  })
+  return parsed.length > 0 ? parsed : []
+})()
+
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
   { key: 'Enquiry', label: 'Enquiry' },
@@ -46,6 +58,8 @@ const DIRECT_AGENT_TYPES = ['self', 'google_ads']
 const emptyEnquiryForm = () => ({
   customerPhone: '', customerName: '', customerId: '',
   agentId: '',
+  enquiryBy: '', bookedBy: '',
+  customerWhatsapp: '', waIsDifferent: false,
   guestName: '', guestPhone: '',
   alternateContactName: '', alternateContactPhone: '',
   customerRequests: '', notes: '', enquiryQuote: '',
@@ -452,6 +466,10 @@ export default function EnquiriesPage() {
   const [noTripConfirm, setNoTripConfirm] = useState(false)
   const [unsavedTripConfirm, setUnsavedTripConfirm] = useState(false)
   const [pendingSubmitData, setPendingSubmitData] = useState(null)
+  const [customerDetailModal, setCustomerDetailModal] = useState(null) // customer object
+  const [customerEditModal, setCustomerEditModal] = useState(null)     // customer object
+  const [customerEditForm, setCustomerEditForm] = useState({})
+  const [customerEditSaving, setCustomerEditSaving] = useState(false)
 
   // ── Form states ───────────────────────────────────────────────────────────
   const [eForm, setEForm] = useState(emptyEnquiryForm())
@@ -553,31 +571,43 @@ export default function EnquiriesPage() {
       // This ensures customerId is written into the enquiry record on creation.
       let resolvedCustomerId = f.customerId
       if (f.customerId) {
-        // Existing linked customer — update if name/phone changed
+        // Existing linked customer — update if name/phone changed, also update whatsappNumber if provided
         const existing = customers.find((c) => c.id === f.customerId)
-        if (existing && (existing.name !== f.customerName || existing.phone !== f.customerPhone)) {
-          await updateCustomer(f.customerId, { name: f.customerName || existing.name, phone: f.customerPhone || existing.phone }, user.username)
+        if (existing) {
+          const updates = {}
+          if (existing.name !== f.customerName) updates.name = f.customerName || existing.name
+          if (existing.phone !== f.customerPhone) updates.phone = f.customerPhone || existing.phone
+          if (f.waIsDifferent && f.customerWhatsapp && f.customerWhatsapp !== existing.whatsappNumber) updates.whatsappNumber = f.customerWhatsapp
+          if (Object.keys(updates).length) await updateCustomer(f.customerId, updates, user.username)
         }
       } else if (f.customerPhone || f.customerName) {
         // Check if phone matches an existing customer
         const byPhone = f.customerPhone ? customers.find((c) => c.phone === f.customerPhone) : null
         if (byPhone) {
           resolvedCustomerId = byPhone.id
-          // Update name if changed
-          if (f.customerName && byPhone.name !== f.customerName) {
-            await updateCustomer(byPhone.id, { name: f.customerName }, user.username)
-          }
+          const updates = {}
+          if (f.customerName && byPhone.name !== f.customerName) updates.name = f.customerName
+          if (f.waIsDifferent && f.customerWhatsapp && f.customerWhatsapp !== byPhone.whatsappNumber) updates.whatsappNumber = f.customerWhatsapp
+          if (Object.keys(updates).length) await updateCustomer(byPhone.id, updates, user.username)
         } else {
           // Create new customer with pre-generated ID
           const newCustomerId = generateId()
-          await createCustomer({ id: newCustomerId, name: f.customerName || '', phone: f.customerPhone || '' }, user.username)
+          const newCustData = { id: newCustomerId, name: f.customerName || '', phone: f.customerPhone || '' }
+          if (f.waIsDifferent && f.customerWhatsapp) newCustData.whatsappNumber = f.customerWhatsapp
+          await createCustomer(newCustData, user.username)
           resolvedCustomerId = newCustomerId
         }
         await refetchCustomers()
       }
 
-      // Strip name/phone — only store customerId in enquiry record
-      f = { ...f, customerId: resolvedCustomerId, customerName: undefined, customerPhone: undefined }
+      // Strip name/phone and customer-only fields — only store customerId in enquiry record
+      // bookedBy is set here if converting to booking (will be written in confirmBooking payload)
+      f = {
+        ...f,
+        customerId: resolvedCustomerId,
+        customerName: undefined, customerPhone: undefined,
+        customerWhatsapp: undefined, waIsDifferent: undefined,
+      }
 
       // ── Step 2: Save the enquiry record (now with customerId populated) ──
       if (editEnquiry) {
@@ -594,7 +624,8 @@ export default function EnquiriesPage() {
 
       // If converting to booking, call confirmBooking
       if (isBooking && savedEnquiryId) {
-        await confirmBooking(savedEnquiryId, { ...f, ...bFields }, user.username)
+        const bookedByValue = f.bookedBy || user.username
+        await confirmBooking(savedEnquiryId, { ...f, ...bFields, bookedBy: bookedByValue }, user.username)
       }
 
       // Save inline trips
@@ -753,7 +784,7 @@ export default function EnquiriesPage() {
 
   const openNewEnquiry = () => {
     setEditEnquiry(null)
-    setEForm(emptyEnquiryForm())
+    setEForm({ ...emptyEnquiryForm(), enquiryBy: user.username })
     setInlineTrips([])
     setConvertToBooking(false)
     setBookingFields(emptyBookingFields())
@@ -764,10 +795,15 @@ export default function EnquiriesPage() {
 
   const openEditEnquiry = (e) => {
     setEditEnquiry(e)
+    const cust = customers.find(c => c.id === e.customerId)
+    const hasWa = !!(cust?.whatsappNumber)
     setEForm({
-      customerPhone: customers.find(c => c.id === e.customerId)?.phone || e.customerPhone || '',
-      customerName: customers.find(c => c.id === e.customerId)?.name || e.customerName || '',
+      customerPhone: cust?.phone || e.customerPhone || '',
+      customerName: cust?.name || e.customerName || '',
       customerId: e.customerId || '', agentId: e.agentId || '',
+      enquiryBy: e.enquiryBy || '', bookedBy: e.bookedBy || '',
+      customerWhatsapp: cust?.whatsappNumber || '',
+      waIsDifferent: hasWa,
       guestName: e.guestName || '', guestPhone: e.guestPhone || '',
       alternateContactName: e.alternateContactName || '', alternateContactPhone: e.alternateContactPhone || '',
       customerRequests: e.customerRequests || '', notes: e.notes || '', enquiryQuote: e.enquiryQuote || '',
@@ -963,6 +999,40 @@ export default function EnquiriesPage() {
             </p>
           )}
 
+          {/* Enquiry By / Booked By */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Enquiry By</label>
+              {isAdmin && APP_USERS.length > 0 ? (
+                <select
+                  value={eForm.enquiryBy}
+                  onChange={(e) => setEForm(f => ({ ...f, enquiryBy: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">— select user —</option>
+                  {APP_USERS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              ) : (
+                <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50">{eForm.enquiryBy || user.username}</div>
+              )}
+            </div>
+            {(convertToBooking || editEnquiry?.bookingId) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Booked By</label>
+                {isAdmin && APP_USERS.length > 0 ? (
+                  <select
+                    value={eForm.bookedBy}
+                    onChange={(e) => setEForm(f => ({ ...f, bookedBy: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">— select user —</option>
+                    {APP_USERS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50">{eForm.bookedBy || user.username}</div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Customer */}
           <SectionTitle>
             Customer Details
@@ -985,12 +1055,42 @@ export default function EnquiriesPage() {
                 phone={eForm.customerPhone}
                 customers={customers}
                 visible={phoneFieldFocused}
-                onSelect={(c) => setEForm(f => ({ ...f, customerId: c.id, customerName: c.name, customerPhone: c.phone }))}
+                onSelect={(c) => setEForm(f => ({
+                  ...f,
+                  customerId: c.id, customerName: c.name, customerPhone: c.phone,
+                  customerWhatsapp: c.whatsappNumber || '',
+                  waIsDifferent: !!(c.whatsappNumber),
+                }))}
               />
               {eForm.customerId && <p className="text-xs text-green-600 mt-1">✓ Linked to existing customer</p>}
             </div>
             <Input label="Customer Name" value={eForm.customerName}
               onChange={(e) => setEForm(f => ({ ...f, customerName: e.target.value }))} />
+          </div>
+
+          {/* WhatsApp number (if different from primary) */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 select-none">
+              <input type="checkbox" className="rounded border-gray-300 text-green-600"
+                checked={!!eForm.waIsDifferent}
+                onChange={(e) => setEForm(f => ({ ...f, waIsDifferent: e.target.checked, customerWhatsapp: e.target.checked ? f.customerWhatsapp : '' }))} />
+              WhatsApp number is different from primary number
+            </label>
+            {eForm.waIsDifferent && (
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 24 24" fill="#25D366" className="w-4 h-4 flex-shrink-0">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                </svg>
+                <Input
+                  label=""
+                  type="tel"
+                  placeholder="WhatsApp number"
+                  value={eForm.customerWhatsapp}
+                  onChange={(e) => setEForm(f => ({ ...f, customerWhatsapp: e.target.value }))}
+                  className="flex-1"
+                />
+              </div>
+            )}
           </div>
 
           {/* Guest */}
@@ -1184,11 +1284,34 @@ export default function EnquiriesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                 <InfoRow label="Enquiry ID" value={liveDetailEnquiry.enquiryId} />
                 <InfoRow label="Booking ID" value={liveDetailEnquiry.bookingId || '—'} />
-                <InfoRow label="Customer" value={customers.find(c => c.id === liveDetailEnquiry.customerId)?.name || liveDetailEnquiry.customerName || '—'} />
-                <InfoRow label="Customer Phone" value={customers.find(c => c.id === liveDetailEnquiry.customerId)?.phone || liveDetailEnquiry.customerPhone || '—'} />
+                {(() => {
+                  const cust = customers.find(c => c.id === liveDetailEnquiry.customerId)
+                  return (<>
+                    <InfoRow label="Customer" value={cust?.name || liveDetailEnquiry.customerName || '—'} />
+                    <InfoRow label="Customer Phone" value={cust?.phone || liveDetailEnquiry.customerPhone || '—'} />
+                    {cust?.whatsappNumber && (
+                      <InfoRow label="WhatsApp" value={
+                        <span className="flex items-center gap-1.5">
+                          <svg viewBox="0 0 24 24" fill="#25D366" className="w-3.5 h-3.5 flex-shrink-0">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                          </svg>
+                          {cust.whatsappNumber}
+                        </span>
+                      } />
+                    )}
+                    {cust && (
+                      <div className="flex gap-2 py-1 col-span-full">
+                        <Button size="sm" variant="ghost" onClick={() => setCustomerDetailModal(cust)}>View Customer</Button>
+                        {isAdmin && <Button size="sm" variant="ghost" onClick={() => { setCustomerEditForm({ ...cust }); setCustomerEditModal(cust) }}>Edit Customer</Button>}
+                      </div>
+                    )}
+                  </>)
+                })()}
                 {liveDetailEnquiry.guestName && <InfoRow label="Guest" value={`${liveDetailEnquiry.guestName}${liveDetailEnquiry.guestPhone ? ` · ${liveDetailEnquiry.guestPhone}` : ''}`} />}
                 {liveDetailEnquiry.alternateContactName && <InfoRow label="Alt. Contact" value={`${liveDetailEnquiry.alternateContactName}${liveDetailEnquiry.alternateContactPhone ? ` · ${liveDetailEnquiry.alternateContactPhone}` : ''}`} />}
                 <InfoRow label="Agent" value={agents.find(a => a.id === liveDetailEnquiry.agentId)?.name || '—'} />
+                {liveDetailEnquiry.enquiryBy && <InfoRow label="Enquiry By" value={liveDetailEnquiry.enquiryBy} />}
+                {liveDetailEnquiry.bookedBy && <InfoRow label="Booked By" value={liveDetailEnquiry.bookedBy} />}
                 {/* Pickup / location from trip(s) */}
                 {enquiryTrips.length === 1 && (<>
                   <InfoRow label={`Pickup Date (Trip 1)`} value={formatDateTime(enquiryTrips[0].pickupDateTime) || formatDate(enquiryTrips[0].startDate)} />
@@ -1205,19 +1328,22 @@ export default function EnquiriesPage() {
 
               {/* Quote(s) — read-only preview with WhatsApp send button */}
               {(liveDetailEnquiry.enquiryQuote || liveDetailEnquiry.bookingQuote) && (() => {
-                const custPhone = customers.find(c => c.id === liveDetailEnquiry.customerId)?.phone || liveDetailEnquiry.customerPhone || ''
-                const waPhone = custPhone.replace(/\D/g, '').replace(/^0+/, '')
+                const cust = customers.find(c => c.id === liveDetailEnquiry.customerId)
+                // Prefer dedicated whatsappNumber, fall back to primary phone
+                const rawWaPhone = cust?.whatsappNumber || cust?.phone || liveDetailEnquiry.customerPhone || ''
+                const waPhone = rawWaPhone.replace(/\D/g, '').replace(/^0+/, '')
                 const waPhoneFormatted = waPhone.length === 10 ? '91' + waPhone : waPhone
 
                 const QuoteBlock = ({ title, text, bgClass }) => {
                   const waUrl = waPhoneFormatted && text ? `https://wa.me/${waPhoneFormatted}?text=${encodeURIComponent(text)}` : null
+                  const waLabel = cust?.whatsappNumber ? `Send to ${cust.whatsappNumber} (WA)` : `Send to ${rawWaPhone}`
                   return (
                     <div className={`mt-3 rounded-xl px-4 py-3 ${bgClass}`}>
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{title}</p>
                         {waUrl && (
                           <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                            title={`Send to ${custPhone} on WhatsApp`}
+                            title={waLabel}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#25D366] hover:bg-[#1ebe5d] transition-colors text-white text-xs font-medium">
                             <svg viewBox="0 0 24 24" fill="white" className="w-3.5 h-3.5">
                               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
@@ -1602,6 +1728,90 @@ export default function EnquiriesPage() {
         title="Delete Enquiry"
         message={`Delete enquiry "${deleteTarget?.enquiryId}"? This uses soft delete — record will appear in the Deleted tab.`}
       />
+
+      {/* ── Customer Detail Modal ─────────────────────────────────────────────── */}
+      <Modal open={!!customerDetailModal} onClose={() => setCustomerDetailModal(null)}
+        title={customerDetailModal?.name || 'Customer Details'} size="md">
+        {customerDetailModal && (
+          <div className="space-y-1">
+            <InfoRow label="Phone" value={customerDetailModal.phone} />
+            {customerDetailModal.whatsappNumber && (
+              <InfoRow label="WhatsApp" value={
+                <span className="flex items-center gap-1.5">
+                  <svg viewBox="0 0 24 24" fill="#25D366" className="w-3.5 h-3.5 flex-shrink-0">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                  </svg>
+                  {customerDetailModal.whatsappNumber}
+                </span>
+              } />
+            )}
+            <InfoRow label="Alt Phone 1" value={customerDetailModal.alternatePhone1} />
+            <InfoRow label="Alt Phone 2" value={customerDetailModal.alternatePhone2} />
+            <InfoRow label="Email" value={customerDetailModal.email} />
+            <InfoRow label="Alt Email" value={customerDetailModal.alternateEmail} />
+            <InfoRow label="Address" value={customerDetailModal.address} />
+            {customerDetailModal.customerStatus && (
+              <InfoRow label="Status" value={customerDetailModal.customerStatus === 'repeating' ? '⭐ Repeating' : customerDetailModal.customerStatus} />
+            )}
+            {customerDetailModal.notes && (
+              <div className="mt-3 text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{customerDetailModal.notes}</div>
+            )}
+            {isAdmin && (
+              <div className="flex justify-end mt-5">
+                <Button variant="secondary" onClick={() => {
+                  setCustomerEditForm({ ...customerDetailModal })
+                  setCustomerEditModal(customerDetailModal)
+                  setCustomerDetailModal(null)
+                }}>Edit Customer</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Customer Edit Modal ───────────────────────────────────────────────── */}
+      <Modal open={!!customerEditModal} onClose={() => setCustomerEditModal(null)}
+        title={`Edit: ${customerEditModal?.name || 'Customer'}`} size="lg">
+        {customerEditModal && (
+          <form onSubmit={async (ev) => {
+            ev.preventDefault()
+            setCustomerEditSaving(true)
+            try {
+              await updateCustomer(customerEditModal.id, customerEditForm, user.username)
+              await refetchCustomers()
+              setCustomerEditModal(null)
+              setSuccessMsg('Customer updated.')
+              setTimeout(() => setSuccessMsg(''), 3000)
+            } catch (err) {
+              // show inline error
+            } finally {
+              setCustomerEditSaving(false)
+            }
+          }} className="space-y-4">
+            <SectionTitle>Basic Info</SectionTitle>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Name" required value={customerEditForm.name || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, name: e.target.value }))} />
+              <Input label="Phone" type="tel" value={customerEditForm.phone || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, phone: e.target.value }))} />
+              <Input label="WhatsApp Number" type="tel" value={customerEditForm.whatsappNumber || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, whatsappNumber: e.target.value }))}
+                placeholder="Leave blank if same as phone" />
+              <Input label="Alternate Phone 1" type="tel" value={customerEditForm.alternatePhone1 || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, alternatePhone1: e.target.value }))} />
+              <Input label="Alternate Phone 2" type="tel" value={customerEditForm.alternatePhone2 || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, alternatePhone2: e.target.value }))} />
+              <Input label="Email" type="email" value={customerEditForm.email || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, email: e.target.value }))} />
+              <Input label="Alternate Email" type="email" value={customerEditForm.alternateEmail || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, alternateEmail: e.target.value }))} />
+            </div>
+            <Input label="Address" value={customerEditForm.address || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, address: e.target.value }))} />
+            <SectionTitle>Notes</SectionTitle>
+            <textarea rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={customerEditForm.notes || ''} onChange={(e) => setCustomerEditForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Internal notes about this customer..." />
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setCustomerEditModal(null)}>Cancel</Button>
+              <Button type="submit" loading={customerEditSaving}>Update Customer</Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   )
 }

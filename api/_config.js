@@ -34,7 +34,7 @@ export const SHEET_CONFIG = {
       'email', 'address',
       'drivingLicenseFileUrl', 'aadharFileUrl', 'photoFileUrl',
       'otherDoc1Name', 'otherDoc1FileUrl', 'otherDoc2Name', 'otherDoc2FileUrl',
-      'monthlyFixedSalary', 'joiningDate',
+      'monthlyFixedSalary', 'joiningDate', 'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
@@ -42,7 +42,7 @@ export const SHEET_CONFIG = {
     spreadsheetId: SPREADSHEET_IDS.master,
     headers: [
       'id', 'agentType', 'name', 'contactPersonName', 'phone', 'alternatePhone1', 'alternatePhone2',
-      'email', 'alternateEmail', 'address',
+      'email', 'alternateEmail', 'address', 'notes',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
@@ -50,7 +50,7 @@ export const SHEET_CONFIG = {
     spreadsheetId: SPREADSHEET_IDS.master,
     headers: [
       'id', 'name', 'phone', 'alternatePhone1', 'alternatePhone2',
-      'email', 'alternateEmail', 'address',
+      'whatsappNumber', 'email', 'alternateEmail', 'address', 'notes',
       'customerStatus',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
@@ -79,6 +79,7 @@ export const SHEET_CONFIG = {
     spreadsheetId: SPREADSHEET_IDS.operations,
     headers: [
       'enquiryId', 'bookingId', 'customerId', 'agentId', 'isAgentBooking', 'status',
+      'enquiryBy', 'bookedBy',
       'guestName', 'guestPhone', 'alternateContactName', 'alternateContactPhone',
       'pickupDateTime', 'pickupLocation', 'trainFlightNumber', 'dropLocation',
       'customerRequests', 'notes', 'enquiryQuote', 'bookingQuote',

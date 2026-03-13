@@ -27,7 +27,7 @@ const AGENT_TYPE_COLORS = {
 
 const emptyForm = () => ({
   name: '', agentType: 'other_business', contactPersonName: '', phone: '',
-  alternatePhone1: '', alternatePhone2: '', email: '', alternateEmail: '', address: '',
+  alternatePhone1: '', alternatePhone2: '', email: '', alternateEmail: '', address: '', notes: '',
 })
 
 export default function AgentsPage() {
@@ -153,6 +153,11 @@ export default function AgentsPage() {
             <Input label="Alternate Email" type="email" {...field('alternateEmail')} />
           </div>
           <Input label="Address" {...field('address')} />
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={form.notes ?? ''} onChange={(ev) => setForm((f) => ({ ...f, notes: ev.target.value }))} placeholder="Internal notes about this agent..." />
+          </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button type="submit" loading={saving}>{editAgent ? 'Update' : 'Add Agent'}</Button>
@@ -172,6 +177,7 @@ export default function AgentsPage() {
             <InfoRow label="Phone" value={detail.phone} />
             <InfoRow label="Email" value={detail.email} />
             <InfoRow label="Address" value={detail.address} />
+            {detail.notes && <div className="mt-3 text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{detail.notes}</div>}
             {isAdmin && <div className="flex justify-end mt-5"><Button variant="secondary" onClick={() => { setDetail(null); openEdit(detail) }}>Edit</Button></div>}
           </div>
         )}
