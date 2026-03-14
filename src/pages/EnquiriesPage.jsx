@@ -605,6 +605,7 @@ export default function EnquiriesPage() {
       f = {
         ...f,
         customerId: resolvedCustomerId,
+        enquiryBy: f.enquiryBy || user.username,
         customerName: undefined, customerPhone: undefined,
         customerWhatsapp: undefined, waIsDifferent: undefined,
       }
@@ -1005,10 +1006,9 @@ export default function EnquiriesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Enquiry By</label>
               {isAdmin && APP_USERS.length > 0 ? (
                 <select
-                  value={eForm.enquiryBy}
+                  value={eForm.enquiryBy || user.username}
                   onChange={(e) => setEForm(f => ({ ...f, enquiryBy: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">— select user —</option>
                   {APP_USERS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               ) : (
@@ -1020,10 +1020,9 @@ export default function EnquiriesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Booked By</label>
                 {isAdmin && APP_USERS.length > 0 ? (
                   <select
-                    value={eForm.bookedBy}
+                    value={eForm.bookedBy || user.username}
                     onChange={(e) => setEForm(f => ({ ...f, bookedBy: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">— select user —</option>
                     {APP_USERS.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 ) : (
