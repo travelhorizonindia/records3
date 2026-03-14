@@ -321,7 +321,7 @@ function QuoteField({ label, value, onChange, onGenerate, trips = [], customerPh
 
 // ─── Per-trip financials inline row ──────────────────────────────────────────
 
-function TripFinancialsRow({ trip, onSave }) {
+function TripFinancialsRow({ trip, onSave, isViewer }) {
   const [editing, setEditing] = useState(false)
   const [vals, setVals] = useState({
     totalAmount: trip.totalAmount || '',
@@ -361,10 +361,12 @@ function TripFinancialsRow({ trip, onSave }) {
       </>) : (
         <span className="text-gray-300">No amount set</span>
       )}
-      <button type="button" onClick={() => setEditing(true)}
-        className="text-blue-400 hover:text-blue-600 underline ml-1">
-        {hasValues ? 'Edit' : 'Add amounts'}
-      </button>
+      {!isViewer && (
+        <button type="button" onClick={() => setEditing(true)}
+          className="text-blue-400 hover:text-blue-600 underline ml-1">
+          {hasValues ? 'Edit' : 'Add amounts'}
+        </button>
+      )}
     </div>
   )
 
@@ -426,7 +428,7 @@ function ConvertToBookingInline({ enquiry, onDone, user }) {
 }
 
 export default function EnquiriesPage() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isViewer } = useAuth()
 
   const { data: enquiries = [], loading: eLoading, refetch: refetchEnquiries } = useAsync(getEnquiries)
   const { data: trips = [], loading: tLoading, refetch: refetchTrips } = useAsync(getTrips)
@@ -900,7 +902,7 @@ export default function EnquiriesPage() {
     { key: 'createdAt', label: 'Created', render: (e) => formatDate(e.createdAt) },
     {
       key: 'actions', label: '',
-      render: (e) => (
+      render: (e) => isViewer ? null : (
         <div className="flex gap-1" onClick={(ev) => ev.stopPropagation()}>
           <Button size="sm" variant="ghost" onClick={() => openEditEnquiry(e)}>Edit</Button>
           {isAdmin && <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(e)} className="text-red-500">Del</Button>}
@@ -915,7 +917,7 @@ export default function EnquiriesPage() {
       <PageHeader
         title="Enquiries & Bookings"
         subtitle={`${enquiries.filter(e => e.isDeleted !== 'true').length} total records`}
-        actions={<Button onClick={openNewEnquiry}>+ New Enquiry</Button>}
+        actions={!isViewer && <Button onClick={openNewEnquiry}>+ New Enquiry</Button>}
       />
       {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg('')} />}
 
@@ -1269,26 +1271,30 @@ export default function EnquiriesPage() {
                 <Badge className={BOOKING_STATUS_COLORS[liveDetailEnquiry.status] || 'bg-gray-100 text-gray-700'}>
                   {liveDetailEnquiry.status}
                 </Badge>
-                {/* Context-aware status options */}
-                <div className="flex gap-1 flex-wrap">
-                  {(isConfirmed
-                    ? ['Upcoming', 'Ongoing', 'Completed', 'Cancelled']
-                    : ['Enquiry', 'Dropped off']
-                  ).map((s) => (
-                    <button key={s} type="button"
-                      onClick={() => doStatusUpdate(s)}
-                      disabled={updatingStatus || liveDetailEnquiry.status === s}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors disabled:opacity-40
-                        ${liveDetailEnquiry.status === s
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => { setDetailEnquiry(null); openEditEnquiry(liveDetailEnquiry) }}>
-                  Edit
-                </Button>
+                {/* Context-aware status options — hidden from viewer */}
+                {!isViewer && (
+                  <div className="flex gap-1 flex-wrap">
+                    {(isConfirmed
+                      ? ['Upcoming', 'Ongoing', 'Completed', 'Cancelled']
+                      : ['Enquiry', 'Dropped off']
+                    ).map((s) => (
+                      <button key={s} type="button"
+                        onClick={() => doStatusUpdate(s)}
+                        disabled={updatingStatus || liveDetailEnquiry.status === s}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors disabled:opacity-40
+                          ${liveDetailEnquiry.status === s
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!isViewer && (
+                  <Button size="sm" variant="ghost" onClick={() => { setDetailEnquiry(null); openEditEnquiry(liveDetailEnquiry) }}>
+                    Edit
+                  </Button>
+                )}
               </div>
 
               {/* Info */}
@@ -1314,7 +1320,7 @@ export default function EnquiriesPage() {
                     {cust && (
                       <div className="flex gap-2 py-1 col-span-full">
                         <Button size="sm" variant="ghost" onClick={() => setCustomerDetailModal(cust)}>View Customer</Button>
-                        {isAdmin && <Button size="sm" variant="ghost" onClick={() => { setCustomerEditForm({ ...cust }); setCustomerEditModal(cust) }}>Edit Customer</Button>}
+                        {isAdmin && !isViewer && <Button size="sm" variant="ghost" onClick={() => { setCustomerEditForm({ ...cust }); setCustomerEditModal(cust) }}>Edit Customer</Button>}
                       </div>
                     )}
                   </>)
@@ -1411,10 +1417,12 @@ export default function EnquiriesPage() {
               {/* Trips — drag to reorder */}
               <div className="flex items-center justify-between mt-4 mb-2">
                 <SectionTitle>Trips ({enquiryTrips.length})</SectionTitle>
-                <Button size="sm" variant="secondary" onClick={() => {
-                  setTripForm(emptyTripForm())
-                  setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: null })
-                }}>+ Add Trip</Button>
+                {!isViewer && (
+                  <Button size="sm" variant="secondary" onClick={() => {
+                    setTripForm(emptyTripForm())
+                    setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: null })
+                  }}>+ Add Trip</Button>
+                )}
               </div>
               {enquiryTrips.length === 0 ? (
                 <p className="text-sm text-gray-400 py-2">No trips added yet.</p>
@@ -1456,14 +1464,16 @@ export default function EnquiriesPage() {
                           {trip.localSubType && <span className="text-gray-400">({trip.localSubType})</span>}
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <Button size="sm" variant="ghost" onClick={() => {
-                            setTripForm({
-                              ...emptyTripForm(), ...trip,
-                              pickupTime: trip.pickupDateTime ? trip.pickupDateTime.split('T')[1]?.slice(0, 5) : ''
-                            })
-                            setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: trip })
-                          }}>Edit</Button>
-                          <Button size="sm" variant="ghost" onClick={async () => { await softDeleteTrip(trip.id, user.username); await refetchTrips() }} className="text-red-500">Del</Button>
+                          {!isViewer && (<>
+                            <Button size="sm" variant="ghost" onClick={() => {
+                              setTripForm({
+                                ...emptyTripForm(), ...trip,
+                                pickupTime: trip.pickupDateTime ? trip.pickupDateTime.split('T')[1]?.slice(0, 5) : ''
+                              })
+                              setTripModal({ enquiryId: liveDetailEnquiry.enquiryId, bookingId: liveDetailEnquiry.bookingId, editTrip: trip })
+                            }}>Edit</Button>
+                            <Button size="sm" variant="ghost" onClick={async () => { await softDeleteTrip(trip.id, user.username); await refetchTrips() }} className="text-red-500">Del</Button>
+                          </>)}
                         </div>
                       </div>
                       <div className="text-gray-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
@@ -1477,7 +1487,7 @@ export default function EnquiriesPage() {
                         {(trip.isVendorTrip === 'true' || trip.isVendorTrip === true) && <span className="text-orange-600">Vendor: {trip.vendorName}</span>}
                       </div>
                       {/* Per-trip financials — inline editable */}
-                      <TripFinancialsRow trip={trip} onSave={async (vals) => {
+                      <TripFinancialsRow trip={trip} isViewer={isViewer} onSave={async (vals) => {
                         await updateTrip(trip.id, vals, user.username)
                         await refetchTrips()
                       }} />
@@ -1487,8 +1497,8 @@ export default function EnquiriesPage() {
                 </div>
               )}
 
-              {/* Convert to Booking — only for unconfirmed enquiries */}
-              {!isConfirmed && (
+              {/* Convert to Booking — only for unconfirmed enquiries, hidden from viewer */}
+              {!isConfirmed && !isViewer && (
                 <div className="mt-4 border border-blue-100 rounded-xl bg-blue-50/40 p-4">
                   <p className="text-sm font-semibold text-blue-800 mb-3">Convert to Booking</p>
                   <ConvertToBookingInline
@@ -1507,10 +1517,12 @@ export default function EnquiriesPage() {
                 <>
                   <div className="flex items-center justify-between mt-4 mb-2">
                     <SectionTitle>Payments ({payments.length})</SectionTitle>
-                    <Button size="sm" variant="secondary" onClick={() => {
-                      setPayForm(emptyPaymentForm())
-                      setPaymentModal({ bookingId: liveDetailEnquiry.bookingId })
-                    }}>+ Add Payment</Button>
+                    {!isViewer && (
+                      <Button size="sm" variant="secondary" onClick={() => {
+                        setPayForm(emptyPaymentForm())
+                        setPaymentModal({ bookingId: liveDetailEnquiry.bookingId })
+                      }}>+ Add Payment</Button>
+                    )}
                   </div>
                   {payments.length === 0 ? (
                     <p className="text-sm text-gray-400 py-2">No payments recorded.</p>
@@ -1529,7 +1541,7 @@ export default function EnquiriesPage() {
                           <div className="flex items-center gap-2">
                             {p.isVerified === 'true'
                               ? <Badge className="bg-green-100 text-green-700">Verified</Badge>
-                              : isAdmin && <Button size="sm" variant="ghost" onClick={async () => { await verifyPayment(p.id, user.username); await refetchPayments() }} className="text-green-600">Verify</Button>
+                              : isAdmin && !isViewer && <Button size="sm" variant="ghost" onClick={async () => { await verifyPayment(p.id, user.username); await refetchPayments() }} className="text-green-600">Verify</Button>
                             }
                           </div>
                         </div>
@@ -1543,16 +1555,17 @@ export default function EnquiriesPage() {
               {isConfirmed && (
                 <div className="flex items-center justify-between mt-4 mb-2">
                   <SectionTitle>Expenses ({bookingExpenses.length})</SectionTitle>
-                  <Button size="sm" variant="secondary" onClick={() => {
-                    // ExpenseForm handles trip selection + vehicle/driver auto-fill
-                    setExpForm({ date: new Date().toISOString().split('T')[0] })
-                    setExpenseTab('fuel')
-                    setExpSavedCount(0)
-                    setExpenseModal({
-                      bookingId: liveDetailEnquiry.bookingId,
-                      enquiryId: liveDetailEnquiry.enquiryId,
-                    })
-                  }}>+ Add Expense</Button>
+                  {!isViewer && (
+                    <Button size="sm" variant="secondary" onClick={() => {
+                      setExpForm({ date: new Date().toISOString().split('T')[0] })
+                      setExpenseTab('fuel')
+                      setExpSavedCount(0)
+                      setExpenseModal({
+                        bookingId: liveDetailEnquiry.bookingId,
+                        enquiryId: liveDetailEnquiry.enquiryId,
+                      })
+                    }}>+ Add Expense</Button>
+                  )}
                 </div>
               )}
               {isConfirmed && (bookingExpenses.length === 0 ? (

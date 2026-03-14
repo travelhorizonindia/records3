@@ -335,7 +335,7 @@ function ServiceHistoryList({ records, onDelete, onUpdate, isAdmin, user }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VehiclesPage() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isViewer } = useAuth()
   const { data: vehicles = [], loading, refetch } = useAsync(getVehicles)
   const { data: allServiceHistory = [], refetch: refetchHistory } = useAsync(vehicleServiceHistoryService.getAll)
 
@@ -468,7 +468,7 @@ export default function VehiclesPage() {
       label: '',
       render: (v) => (
         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-          {isAdmin && (
+          {isAdmin && !isViewer && (
             <>
               <Button size="sm" variant="ghost" onClick={() => openEdit(v)}>Edit</Button>
               <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(v)} className="text-red-500">Delete</Button>
@@ -484,7 +484,7 @@ export default function VehiclesPage() {
       <PageHeader
         title="Fleet Management"
         subtitle={`${vehicles.length} vehicle${vehicles.length !== 1 ? 's' : ''}`}
-        actions={isAdmin && <Button onClick={openAdd}>+ Add Vehicle</Button>}
+        actions={isAdmin && !isViewer && <Button onClick={openAdd}>+ Add Vehicle</Button>}
       />
 
       {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg('')} />}
@@ -584,7 +584,7 @@ export default function VehiclesPage() {
             )}
 
             {/* ── Edit Vehicle button — above Service History ────────────────── */}
-            {isAdmin && (
+            {isAdmin && !isViewer && (
               <div className="flex justify-end mt-4 mb-1">
                 <Button variant="secondary" size="sm" onClick={() => { setDetailVehicle(null); openEdit(liveDetailVehicle) }}>
                   Edit Vehicle
@@ -597,8 +597,8 @@ export default function VehiclesPage() {
               <SectionTitle>Service History</SectionTitle>
             </div>
 
-            {/* Log new service — admin only */}
-            {isAdmin && (
+            {/* Log new service — admin only, not viewer */}
+            {isAdmin && !isViewer && (
               <ServiceEntryForm
                 vehicleId={liveDetailVehicle.id}
                 user={user}
@@ -610,7 +610,7 @@ export default function VehiclesPage() {
               records={vehicleServiceHistory}
               onDelete={handleDeleteServiceEntry}
               onUpdate={handleUpdateServiceEntry}
-              isAdmin={isAdmin}
+              isAdmin={isAdmin && !isViewer}
               user={user}
             />
           </div>

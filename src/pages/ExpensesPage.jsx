@@ -615,7 +615,7 @@ function defaultForm(tab) {
 
 // ─── ExpensesPage ─────────────────────────────────────────────────────────────
 export default function ExpensesPage() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isViewer } = useAuth()
   const [tab, setTab] = useState('fuel')
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({})
@@ -713,11 +713,11 @@ export default function ExpensesPage() {
       <div className="flex items-center gap-2">
         {row.isVerified === 'true'
           ? <Badge className="bg-green-100 text-green-700">Verified</Badge>
-          : isAdmin
+          : isAdmin && !isViewer
             ? <Button size="sm" variant="ghost" className="text-green-600" onClick={(e) => { e.stopPropagation(); handleVerify(row.id) }}>Verify</Button>
             : <Badge className="bg-gray-100 text-gray-600">Unverified</Badge>
         }
-        {isAdmin && (
+        {isAdmin && !isViewer && (
           <Button size="sm" variant="ghost" className="text-red-500" onClick={(e) => { e.stopPropagation(); handleDelete(row.id) }}>Del</Button>
         )}
       </div>
@@ -733,7 +733,7 @@ export default function ExpensesPage() {
 
   const delCol = {
     key: 'del', label: '',
-    render: (row) => isAdmin && (
+    render: (row) => isAdmin && !isViewer && (
       <Button size="sm" variant="ghost" className="text-red-500" onClick={(e) => { e.stopPropagation(); handleDelete(row.id) }}>Del</Button>
     ),
   }
@@ -852,7 +852,7 @@ export default function ExpensesPage() {
     <div>
       <PageHeader
         title="Expenses"
-        actions={<Button onClick={openAdd}>+ Record {tabLabel} Expense</Button>}
+        actions={!isViewer && <Button onClick={openAdd}>+ Record {tabLabel} Expense</Button>}
       />
       {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg('')} />}
 

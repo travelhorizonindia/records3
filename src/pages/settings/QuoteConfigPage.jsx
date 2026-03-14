@@ -39,7 +39,7 @@ function fieldsForTemplate(tk) {
 // ─── Single rate row ──────────────────────────────────────────────────────────
 // The key prop passed by the parent includes updatedAt, so this component fully
 // remounts whenever the DB record changes — fixing the stale initial-state bug.
-function RateRow({ vehicleType, templateKey, configRows, onSave, saving }) {
+function RateRow({ vehicleType, templateKey, configRows, onSave, saving, isViewer }) {
     const existing = configRows.find((r) => r.vehicleType === vehicleType && r.templateKey === templateKey)
     const fields = fieldsForTemplate(templateKey)
 
@@ -72,13 +72,15 @@ function RateRow({ vehicleType, templateKey, configRows, onSave, saving }) {
                         label={f.label}
                         type={f.type}
                         value={vals[f.key]}
-                        onChange={(e) => set(f.key, e.target.value)}
+                        onChange={(e) => { if (!isViewer) set(f.key, e.target.value) }}
                         placeholder="—"
+                        readOnly={isViewer}
+                        className={isViewer ? 'bg-gray-50 cursor-default' : ''}
                     />
                 ))}
             </div>
             <div className="flex justify-end mt-3">
-                {dirty && (
+                {dirty && !isViewer && (
                     <Button
                         size="sm"
                         loading={saving}
@@ -135,7 +137,7 @@ function VehicleTabs({ vehicles, active, onChange, onAdd, onDelete, isAdmin }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function QuoteConfigPage() {
-    const { user, isAdmin } = useAuth()
+    const { user, isAdmin, isViewer } = useAuth()
     const { data: configRows = [], refetch } = useAsync(quoteConfigService.getAll)
 
     const [saving, setSaving] = useState(false)
@@ -255,7 +257,7 @@ export default function QuoteConfigPage() {
                         onChange={setActiveVehicle}
                         onAdd={() => { setNewVehicleName(''); setAddVehicleModal(true) }}
                         onDelete={(v) => setDeleteVehicleTarget(v)}
-                        isAdmin={isAdmin}
+                        isAdmin={isAdmin && !isViewer}
                     />
                 </CardHeader>
 
@@ -271,6 +273,7 @@ export default function QuoteConfigPage() {
                                 configRows={configRows}
                                 onSave={handleSave}
                                 saving={saving}
+                                isViewer={isViewer}
                             />
                         )
                     })}
@@ -286,6 +289,7 @@ export default function QuoteConfigPage() {
                                 configRows={configRows}
                                 onSave={handleSave}
                                 saving={saving}
+                                isViewer={isViewer}
                             />
                         )
                     })}

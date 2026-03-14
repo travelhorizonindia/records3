@@ -17,7 +17,7 @@ const emptyForm = () => ({
 })
 
 export default function DriversPage() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isViewer } = useAuth()
   const { data: drivers = [], loading, refetch } = useAsync(getDrivers)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -93,7 +93,7 @@ export default function DriversPage() {
       key: 'actions', label: '',
       render: (d) => (
         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-          {isAdmin && (
+          {isAdmin && !isViewer && (
             <>
               <Button size="sm" variant="ghost" onClick={() => openEdit(d)}>Edit</Button>
               <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(d)} className="text-red-500">Delete</Button>
@@ -109,7 +109,7 @@ export default function DriversPage() {
       <PageHeader
         title="Drivers"
         subtitle={`${drivers.length} driver${drivers.length !== 1 ? 's' : ''}`}
-        actions={isAdmin && <Button onClick={openAdd}>+ Add Driver</Button>}
+        actions={isAdmin && !isViewer && <Button onClick={openAdd}>+ Add Driver</Button>}
       />
       {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg('')} />}
 
@@ -181,7 +181,7 @@ export default function DriversPage() {
                 <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{detailDriver.notes}</div>
               </>
             )}
-            {isAdmin && <div className="flex justify-end mt-5"><Button variant="secondary" onClick={() => { setDetailDriver(null); openEdit(detailDriver) }}>Edit</Button></div>}
+            {isAdmin && !isViewer && <div className="flex justify-end mt-5"><Button variant="secondary" onClick={() => { setDetailDriver(null); openEdit(detailDriver) }}>Edit</Button></div>}
           </div>
         )}
       </Modal>
