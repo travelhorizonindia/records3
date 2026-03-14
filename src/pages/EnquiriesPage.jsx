@@ -29,16 +29,18 @@ import { WhatsAppText } from '../components/WhatsAppText.jsx'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // ─── User list for enquiryBy / bookedBy dropdowns ────────────────────────────
-// Parses the same VITE_DEV_USERS env var used by AuthContext for local dev.
-// In production, you'll want to maintain this list manually or from a config.
-const APP_USERS = (() => {
-  const raw = import.meta.env.VITE_DEV_USERS || ''
-  const parsed = raw.split(',').map((u) => u.trim()).filter(Boolean).map((entry) => {
-    const [username] = entry.split(':')
-    return username
-  })
-  return parsed.length > 0 ? parsed : []
-})()
+// Fetched from /api/auth/users which reads USER_N_USERNAME env vars server-side.
+// Only usernames are returned — no passwords or roles.
+async function fetchAppUsers() {
+  try {
+    const res = await fetch('/api/auth/users')
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.usernames || []
+  } catch {
+    return []
+  }
+}
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -432,6 +434,12 @@ export default function EnquiriesPage() {
   const { data: customers = [], refetch: refetchCustomers } = useAsync(getCustomers)
   const { data: vehicles = [] } = useAsync(getVehicles)
   const { data: quoteConfigRows = [] } = useAsync(quoteConfigService.getAll)
+  const { data: appUsersRaw = [] } = useAsync(fetchAppUsers)
+  // Ensure current user is always in the list even if API hasn't loaded yet
+  const appUsers = useMemo(() => {
+    const list = appUsersRaw.length > 0 ? appUsersRaw : [user.username]
+    return list.includes(user.username) ? list : [user.username, ...list]
+  }, [appUsersRaw, user.username])
 
   // Vehicle types are mastered in QuoteConfig — derive the live list from DB rows
   const DEFAULT_VEHICLE_SEED = ['Maruti Dzire', 'Innova Crysta', 'Force Traveller 12+1', 'Force Urbania 16+1']
@@ -1002,10 +1010,7 @@ export default function EnquiriesPage() {
 
           {/* Enquiry By / Booked By */}
           {(() => {
-            // Build user options: always include all APP_USERS + ensure current user is present
-            const userOptions = APP_USERS.length > 0
-              ? (APP_USERS.includes(user.username) ? APP_USERS : [user.username, ...APP_USERS])
-              : [user.username]
+            const userOptions = appUsers
 
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
