@@ -1001,36 +1001,45 @@ export default function EnquiriesPage() {
           )}
 
           {/* Enquiry By / Booked By */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Enquiry By</label>
-              {isAdmin && APP_USERS.length > 0 ? (
-                <select
-                  value={eForm.enquiryBy || user.username}
-                  onChange={(e) => setEForm(f => ({ ...f, enquiryBy: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {APP_USERS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-              ) : (
-                <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50">{eForm.enquiryBy || user.username}</div>
-              )}
-            </div>
-            {(convertToBooking || editEnquiry?.bookingId) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Booked By</label>
-                {isAdmin && APP_USERS.length > 0 ? (
-                  <select
-                    value={eForm.bookedBy || user.username}
-                    onChange={(e) => setEForm(f => ({ ...f, bookedBy: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {APP_USERS.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                ) : (
-                  <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50">{eForm.bookedBy || user.username}</div>
+          {(() => {
+            // Build user options: always include all APP_USERS + ensure current user is present
+            const userOptions = APP_USERS.length > 0
+              ? (APP_USERS.includes(user.username) ? APP_USERS : [user.username, ...APP_USERS])
+              : [user.username]
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Enquiry By</label>
+                  {isAdmin ? (
+                    <select
+                      value={eForm.enquiryBy || user.username}
+                      onChange={(e) => setEForm(f => ({ ...f, enquiryBy: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50">{eForm.enquiryBy || user.username}</div>
+                  )}
+                </div>
+                {(convertToBooking || editEnquiry?.bookingId) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Booked By</label>
+                    {isAdmin ? (
+                      <select
+                        value={eForm.bookedBy || user.username}
+                        onChange={(e) => setEForm(f => ({ ...f, bookedBy: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        {userOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50">{eForm.bookedBy || user.username}</div>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            )
+          })()}
 
           {/* Customer */}
           <SectionTitle>
