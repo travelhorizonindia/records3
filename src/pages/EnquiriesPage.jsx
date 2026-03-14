@@ -23,7 +23,7 @@ import {
 } from '../constants/index.js'
 import { formatDate, formatDateTime, formatCurrency, generateId } from '../utils/index.js'
 import { generateQuote, detectTemplate } from '../utils/quoteEngine.js'
-import { quoteConfigService, TEMPLATE_KEYS, TEMPLATE_LABELS } from '../services/quoteConfigService.js'
+import { quoteConfigService, TEMPLATE_KEYS, TEMPLATE_LABELS, DEFAULT_VEHICLE_SEED } from '../services/quoteConfigService.js'
 import { WhatsAppText } from '../components/WhatsAppText.jsx'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -441,13 +441,12 @@ export default function EnquiriesPage() {
     return list.includes(user.username) ? list : [user.username, ...list]
   }, [appUsersRaw, user.username])
 
-  // Vehicle types are mastered in QuoteConfig — derive the live list from DB rows
-  const DEFAULT_VEHICLE_SEED = ['Maruti Dzire', 'Innova Crysta', 'Force Traveller 12+1', 'Force Urbania 16+1']
+  // Vehicle types come from QuoteConfig sheet when populated;
+  // fall back to the seed list only if sheet has no data at all.
   const vehicleTypeOptions = useMemo(() => {
     const fromDb = [...new Set(quoteConfigRows.map((r) => r.vehicleType).filter(Boolean))]
-    const merged = [...DEFAULT_VEHICLE_SEED]
-    for (const v of fromDb) { if (!merged.includes(v)) merged.push(v) }
-    return merged
+    if (fromDb.length > 0) return fromDb
+    return [...DEFAULT_VEHICLE_SEED]
   }, [quoteConfigRows])
   const { data: drivers = [] } = useAsync(getDrivers)
   const { data: allPayments = [], refetch: refetchPayments } = useAsync(getPayments)

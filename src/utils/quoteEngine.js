@@ -33,8 +33,8 @@ function countDays(startDate, endDate) {
     return Math.max(1, diff + 1) // inclusive
 }
 
-/** Format ₹ amount */
-const inr = (n) => `₹${Number(n).toLocaleString('en-IN')}`
+/** Format ₹ amount — returns "₹—" if value is missing/empty */
+const inr = (n) => (n === undefined || n === null || n === '') ? '₹—' : `₹${Number(n).toLocaleString('en-IN')}`
 
 // ─── Template generators ──────────────────────────────────────────────────────
 
@@ -61,8 +61,8 @@ ${FOOTER}`
 function outstationPerDayQuote({ trip, rates }) {
     const { perDayRate, kmPerDay, extraKmRate2 } = rates
     const days = countDays(trip.startDate, trip.endDate)
-    const totalPrice = perDayRate * days
-    const totalKm = kmPerDay * days
+    const totalPrice = perDayRate != null ? perDayRate * days : null
+    const totalKm = kmPerDay != null ? kmPerDay * days : null
     const travelPlan = trip.travelPlan || ''
 
     const dateRange = trip.startDate
@@ -75,17 +75,17 @@ function outstationPerDayQuote({ trip, rates }) {
 *Vehicle:* ${trip.vehicleType}
 *Trip Type:* Outstation${dateRange ? `\n*Dates:* ${dateRange}` : ''}${travelPlan ? `\n${travelPlan}` : ''}
 *Charges:* ${inr(perDayRate)} per day all-inclusive
-_(For ${days} day${days > 1 ? 's' : ''}: ${inr(totalPrice)} total)_
+_(For ${days} day${days > 1 ? 's' : ''}${totalPrice != null ? `: ${inr(totalPrice)} total` : ''})_
 Includes:
 - Vehicle charges
 - Fuel
 - Driver allowance
 - Toll tax, parking & state taxes
-- Total ${totalKm} km for ${days} day${days > 1 ? 's' : ''}
+${totalKm != null ? `- Total ${totalKm} km for ${days} day${days > 1 ? 's' : ''}` : ''}
 *Note:*
 - ${GARAGE_NOTE}
 - Extra km beyond the total limit, or extension in trip days, will be charged as per actuals
-- ${inr(extraKmRate2)}/extra km (Beyond ${totalKm} km)
+- ${inr(extraKmRate2)}/extra km${totalKm != null ? ` (Beyond ${totalKm} km)` : ''}
 
 ${FOOTER}`
 }

@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useAsync } from '../../hooks/useAsync.js'
 import {
-    quoteConfigService, TEMPLATE_KEYS, TEMPLATE_LABELS, DEFAULT_RATES,
+    quoteConfigService, TEMPLATE_KEYS, TEMPLATE_LABELS, DEFAULT_VEHICLE_SEED,
 } from '../../services/quoteConfigService.js'
 import {
     Button, Card, CardHeader, PageHeader, Alert, SectionTitle, Input, Modal, ConfirmDialog,
@@ -40,14 +40,13 @@ function fieldsForTemplate(tk) {
 // The key prop passed by the parent includes updatedAt, so this component fully
 // remounts whenever the DB record changes — fixing the stale initial-state bug.
 function RateRow({ vehicleType, templateKey, configRows, onSave, saving }) {
-    const defaults = DEFAULT_RATES[vehicleType]?.[templateKey] || {}
     const existing = configRows.find((r) => r.vehicleType === vehicleType && r.templateKey === templateKey)
     const fields = fieldsForTemplate(templateKey)
 
     const [vals, setVals] = useState(() => {
         const base = {}
         for (const f of fields) {
-            base[f.key] = existing?.[f.key] ?? defaults[f.key] ?? ''
+            base[f.key] = existing?.[f.key] ?? ''
         }
         return base
     })
@@ -62,8 +61,8 @@ function RateRow({ vehicleType, templateKey, configRows, onSave, saving }) {
             <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-semibold text-gray-700">{TEMPLATE_LABELS[templateKey]}</p>
                 {existing
-                    ? <span className="text-xs text-green-600 bg-green-50 rounded px-2 py-0.5">Custom rates saved</span>
-                    : <span className="text-xs text-gray-400 bg-gray-50 rounded px-2 py-0.5">Using defaults</span>
+                    ? <span className="text-xs text-green-600 bg-green-50 rounded px-2 py-0.5">Rates saved</span>
+                    : <span className="text-xs text-orange-500 bg-orange-50 rounded px-2 py-0.5">No rates set</span>
                 }
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -74,22 +73,11 @@ function RateRow({ vehicleType, templateKey, configRows, onSave, saving }) {
                         type={f.type}
                         value={vals[f.key]}
                         onChange={(e) => set(f.key, e.target.value)}
-                        placeholder={String(defaults[f.key] ?? '')}
+                        placeholder="—"
                     />
                 ))}
             </div>
-            <div className="flex justify-end mt-3 gap-2">
-                {existing && !dirty && (
-                    <Button size="sm" variant="ghost" className="text-gray-400 text-xs"
-                        onClick={() => {
-                            const base = {}
-                            for (const f of fields) base[f.key] = defaults[f.key] ?? ''
-                            setVals(base)
-                            setDirty(true)
-                        }}>
-                        Reset to defaults
-                    </Button>
-                )}
+            <div className="flex justify-end mt-3">
                 {dirty && (
                     <Button
                         size="sm"
@@ -159,17 +147,13 @@ export default function QuoteConfigPage() {
     const [addingVehicle, setAddingVehicle] = useState(false)
     const [deleteVehicleTarget, setDeleteVehicleTarget] = useState(null)
 
-    // Default vehicle seeds — shown even if no DB rows exist yet
-    const DEFAULT_VEHICLE_SEED = ['Maruti Dzire', 'Innova Crysta', 'Force Traveller 12+1', 'Force Urbania 16+1']
-
-    // Derive vehicle list: seeds first, then any extra types found in DB
+    // When sheet has data, vehicle list comes entirely from DB.
+    // When sheet is empty, the seed list below is shown as a starting point.
     const vehicles = useMemo(() => {
         const fromDb = [...new Set(configRows.map((r) => r.vehicleType).filter(Boolean))]
-        const merged = [...DEFAULT_VEHICLE_SEED]
-        for (const v of fromDb) {
-            if (!merged.includes(v)) merged.push(v)
-        }
-        return merged
+        if (fromDb.length > 0) return fromDb
+        // No DB data yet — show the seed list so user can start adding rates
+        return [...DEFAULT_VEHICLE_SEED]
     }, [configRows])
 
     const [activeVehicle, setActiveVehicle] = useState(() => DEFAULT_VEHICLE_SEED[0])
@@ -257,7 +241,7 @@ export default function QuoteConfigPage() {
         <div>
             <PageHeader
                 title="Quote Configuration"
-                subtitle="Vehicle types here are the master list used in trips and quotes. Add a vehicle type to include it everywhere."
+                subtitle="Set rates per vehicle type. Rates are saved to the sheet — there are no hardcoded defaults. Vehicle types here drive the dropdown in trip forms and the quote generator."
             />
 
             {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg('')} />}
@@ -308,6 +292,7 @@ export default function QuoteConfigPage() {
 
                     <p className="text-xs text-gray-400 pt-2">
                         * "Outstation - Custom Total" and "Local + Outstation Mixed" templates use no rates — they generate a blank template for manual filling.
+                        Rates with no values saved will appear as empty fields in the quote generator.
                     </p>
                 </div>
             </Card>
