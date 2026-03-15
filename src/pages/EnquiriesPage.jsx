@@ -74,6 +74,7 @@ const emptyTripForm = () => ({
   pickupTime: '', pickupLocation: '', dropLocation: '',
   allocatedVehicleId: '', allocatedVehicleNumber: '', allocatedVehicleType: '', allocatedVehicleSeating: '',
   allocatedDriverId: '', allocatedDriverName: '', allocatedDriverPhone: '',
+  totalAmount: '',
   notes: '', customerRequests: '', trainFlightNumber: '',
 })
 
@@ -323,48 +324,26 @@ function QuoteField({ label, value, onChange, onGenerate, trips = [], customerPh
 
 function TripFinancialsRow({ trip, onSave, isViewer }) {
   const [editing, setEditing] = useState(false)
-  const [vals, setVals] = useState({
-    totalAmount: trip.totalAmount || '',
-    amountReceived: trip.amountReceived || '',
-    amountPending: trip.amountPending || '',
-  })
+  const [vals, setVals] = useState({ totalAmount: trip.totalAmount || '' })
   const [saving, setSaving] = useState(false)
 
   // Keep in sync if trip prop updates (after refetch)
   useEffect(() => {
-    setVals({
-      totalAmount: trip.totalAmount || '',
-      amountReceived: trip.amountReceived || '',
-      amountPending: trip.amountPending || '',
-    })
-  }, [trip.totalAmount, trip.amountReceived, trip.amountPending])
+    setVals({ totalAmount: trip.totalAmount || '' })
+  }, [trip.totalAmount])
 
-  // Auto-calc pending = total - received
-  useEffect(() => {
-    const total = parseFloat(vals.totalAmount || 0)
-    const recv = parseFloat(vals.amountReceived || 0)
-    if (total || recv) {
-      setVals(v => ({ ...v, amountPending: String(Math.max(0, total - recv)) }))
-    }
-  }, [vals.totalAmount, vals.amountReceived])
-
-  const hasValues = trip.totalAmount || trip.amountReceived || trip.amountPending
+  const hasTotal = !!trip.totalAmount
 
   if (!editing) return (
     <div className="mt-2 flex items-center gap-3 text-xs">
-      {hasValues ? (<>
-        <span className="text-blue-600 font-medium">Total: {formatCurrency(trip.totalAmount)}</span>
-        <span className="text-green-600">Recv: {formatCurrency(trip.amountReceived)}</span>
-        <span className={parseFloat(trip.amountPending) > 0 ? 'text-orange-500 font-medium' : 'text-gray-400'}>
-          Pending: {formatCurrency(trip.amountPending)}
-        </span>
-      </>) : (
-        <span className="text-gray-300">No amount set</span>
-      )}
+      {hasTotal
+        ? <span className="text-blue-600 font-medium">Total: {formatCurrency(trip.totalAmount)}</span>
+        : <span className="text-gray-300">No amount set</span>
+      }
       {!isViewer && (
         <button type="button" onClick={() => setEditing(true)}
           className="text-blue-400 hover:text-blue-600 underline ml-1">
-          {hasValues ? 'Edit' : 'Add amounts'}
+          {hasTotal ? 'Edit' : 'Set amount'}
         </button>
       )}
     </div>
@@ -372,15 +351,9 @@ function TripFinancialsRow({ trip, onSave, isViewer }) {
 
   return (
     <div className="mt-2 flex flex-wrap items-end gap-2">
-      <Input label="Total (₹)" type="number" value={vals.totalAmount}
-        onChange={(e) => setVals(v => ({ ...v, totalAmount: e.target.value }))}
-        className="w-full sm:w-28" />
-      <Input label="Received (₹)" type="number" value={vals.amountReceived}
-        onChange={(e) => setVals(v => ({ ...v, amountReceived: e.target.value }))}
-        className="w-full sm:w-28" />
-      <Input label="Pending (₹)" type="number" value={vals.amountPending}
-        onChange={(e) => setVals(v => ({ ...v, amountPending: e.target.value }))}
-        className="w-full sm:w-28" />
+      <Input label="Total Amount (₹)" type="number" value={vals.totalAmount}
+        onChange={(e) => setVals({ totalAmount: e.target.value })}
+        className="w-full sm:w-36" />
       <div className="flex gap-1 mb-0.5">
         <Button size="sm" loading={saving} onClick={async () => {
           setSaving(true)
@@ -543,11 +516,13 @@ export default function EnquiriesPage() {
         if (filterDateTo && e.createdAt && e.createdAt.split('T')[0] > filterDateTo) return false
       }
 
-      // Pending payments only
+      // Pending payments only — pending = sum(trip.totalAmount) - sum(payments for this booking)
       if (filterPendingOnly) {
-        const ePendingTrips = trips.filter(t => (t.bookingId === e.bookingId || t.enquiryId === e.enquiryId) && t.isDeleted !== 'true')
-        const pending = ePendingTrips.reduce((s, t) => s + parseFloat(t.amountPending || 0), 0)
-        if (!(pending > 0)) return false
+        const eTrips = trips.filter(t => (t.bookingId === e.bookingId || t.enquiryId === e.enquiryId) && t.isDeleted !== 'true')
+        const tripTotal = eTrips.reduce((s, t) => s + parseFloat(t.totalAmount || 0), 0)
+        const bookingId = e.bookingId || e.enquiryId
+        const received = allPayments.filter(p => p.bookingId === bookingId && p.isDeleted !== 'true').reduce((s, p) => s + parseFloat(p.amount || 0), 0)
+        if (!(tripTotal - received > 0)) return false
       }
 
       // Bookings only
@@ -558,7 +533,7 @@ export default function EnquiriesPage() {
 
       return true
     })
-  }, [enquiries, tab, search, filterAgent, filterDateFrom, filterDateTo, filterToday, filterPendingOnly, filterBookingsOnly, filterEnquiriesOnly])
+  }, [enquiries, tab, search, filterAgent, filterDateFrom, filterDateTo, filterToday, filterPendingOnly, filterBookingsOnly, filterEnquiriesOnly, trips, allPayments])
 
   const tabsWithCounts = STATUS_TABS.map((t) => ({
     ...t,
@@ -895,7 +870,10 @@ export default function EnquiriesPage() {
     {
       key: 'amountPending', label: 'Pending', render: (e) => {
         const eTrips = trips.filter(t => (t.bookingId === e.bookingId || t.enquiryId === e.enquiryId) && t.isDeleted !== 'true')
-        const pending = eTrips.reduce((s, t) => s + parseFloat(t.amountPending || 0), 0)
+        const tripTotal = eTrips.reduce((s, t) => s + parseFloat(t.totalAmount || 0), 0)
+        const bookingId = e.bookingId || e.enquiryId
+        const received = allPayments.filter(p => p.bookingId === bookingId && p.isDeleted !== 'true').reduce((s, p) => s + parseFloat(p.amount || 0), 0)
+        const pending = Math.max(0, tripTotal - received)
         return pending > 0 ? formatCurrency(pending) : '—'
       }
     },
@@ -1387,12 +1365,16 @@ export default function EnquiriesPage() {
                 )
               })()}
 
-              {/* Financials — summed from trips */}
+              {/* Financials — total from trips, received from payments */}
               {enquiryTrips.length > 0 && (() => {
                 const tripTotal = enquiryTrips.reduce((s, t) => s + parseFloat(t.totalAmount || 0), 0)
-                const tripReceived = enquiryTrips.reduce((s, t) => s + parseFloat(t.amountReceived || 0), 0)
-                const tripPending = enquiryTrips.reduce((s, t) => s + parseFloat(t.amountPending || 0), 0)
-                if (!tripTotal && !tripReceived && !tripPending) return null
+                const verifiedPayments = payments.filter(p => p.isVerified === 'true')
+                const unverifiedPayments = payments.filter(p => p.isVerified !== 'true')
+                const receivedVerified = verifiedPayments.reduce((s, p) => s + parseFloat(p.amount || 0), 0)
+                const receivedUnverified = unverifiedPayments.reduce((s, p) => s + parseFloat(p.amount || 0), 0)
+                const totalReceived = receivedVerified + receivedUnverified
+                const pending = Math.max(0, tripTotal - totalReceived)
+                if (!tripTotal && !totalReceived) return null
                 return (
                   <>
                     <SectionTitle>Financials <span className="text-xs font-normal text-gray-400">(sum of all trips)</span></SectionTitle>
@@ -1403,11 +1385,19 @@ export default function EnquiriesPage() {
                       </div>
                       <div className="bg-green-50 rounded-lg p-3">
                         <p className="text-xs text-green-600">Received</p>
-                        <p className="text-lg font-bold text-green-900">{formatCurrency(tripReceived)}</p>
+                        <p className="text-lg font-bold text-green-900">{formatCurrency(totalReceived)}</p>
+                        {(receivedVerified > 0 || receivedUnverified > 0) && (
+                          <p className="text-xs text-gray-400 mt-1 leading-snug">
+                            {receivedVerified > 0 && <span className="text-green-600">{formatCurrency(receivedVerified)} verified</span>}
+                            {receivedVerified > 0 && receivedUnverified > 0 && <span> · </span>}
+                            {receivedUnverified > 0 && <span className="text-yellow-600">{formatCurrency(receivedUnverified)} unverified</span>}
+                          </p>
+                        )}
                       </div>
                       <div className="bg-yellow-50 rounded-lg p-3">
                         <p className="text-xs text-yellow-600">Pending</p>
-                        <p className="text-lg font-bold text-yellow-900">{formatCurrency(tripPending)}</p>
+                        <p className={`text-lg font-bold ${pending > 0 ? 'text-yellow-900' : 'text-gray-400'}`}>{formatCurrency(pending)}</p>
+                        {!tripTotal && <p className="text-xs text-gray-400 mt-1">Set trip total to calculate</p>}
                       </div>
                     </div>
                   </>
@@ -1635,6 +1625,15 @@ export default function EnquiriesPage() {
             <Input label="Or Manual: Driver Name" value={tripForm.allocatedDriverName} onChange={(e) => setTripForm(f => ({ ...f, allocatedDriverName: e.target.value }))} />
             <Input label="Driver Phone" value={tripForm.allocatedDriverPhone} onChange={(e) => setTripForm(f => ({ ...f, allocatedDriverPhone: e.target.value }))} />
           </div>
+          <SectionTitle>Amount</SectionTitle>
+          <Input
+            label="Total Amount (₹)"
+            type="number"
+            value={tripForm.totalAmount}
+            onChange={(e) => setTripForm(f => ({ ...f, totalAmount: e.target.value }))}
+            placeholder="Leave blank to set later"
+            className="max-w-xs"
+          />
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setTripModal(null)}>Cancel</Button>
             <Button type="submit" loading={savingTrip}>{tripModal?.editTrip ? 'Update Trip' : 'Add Trip'}</Button>

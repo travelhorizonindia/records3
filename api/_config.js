@@ -97,7 +97,7 @@ export const SHEET_CONFIG = {
       'isVendorTrip', 'vendorName', 'vendorPhone', 'vendorCommission',
       'allocatedVehicleId', 'allocatedVehicleNumber', 'allocatedVehicleType', 'allocatedVehicleSeating',
       'allocatedDriverId', 'allocatedDriverName', 'allocatedDriverPhone',
-      'totalAmount', 'amountReceived', 'amountPending',
+      'totalAmount',
       'isDeleted', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
     ],
   },
